@@ -82,10 +82,10 @@ export const Leaderboard: React.FC<LeaderboardProps> = ({
 
   return (
     <div className="w-full">
-      <h3 className="text-white text-xl font-bold mb-4">🏆 Leaderboard</h3>
+      <h3 className="text-white text-lg sm:text-xl font-bold mb-3 sm:mb-4">🏆 Leaderboard</h3>
 
       {playerRank && (
-        <p className="text-yellow-300 text-sm mb-3">
+        <p className="text-yellow-300 text-xs sm:text-sm mb-2 sm:mb-3">
           Your rank: #{playerRank}
         </p>
       )}
@@ -94,10 +94,10 @@ export const Leaderboard: React.FC<LeaderboardProps> = ({
         {entries.map((entry, index) => (
           <div
             key={entry.id}
-            className="bg-black/30 rounded-lg p-3 flex items-center gap-4 hover:bg-black/50 transition"
+            className="bg-black/30 rounded-lg p-2 sm:p-3 flex items-center gap-2 sm:gap-4 hover:bg-black/50 transition"
           >
             {/* Rank */}
-            <div className="text-yellow-300 font-bold text-lg w-8 text-center">
+            <div className="text-yellow-300 font-bold text-base sm:text-lg w-6 sm:w-8 text-center shrink-0">
               #{index + 1}
             </div>
 
@@ -106,7 +106,7 @@ export const Leaderboard: React.FC<LeaderboardProps> = ({
               <img
                 src={entry.avatar_url}
                 alt={entry.player_name}
-                className="w-10 h-10 rounded-full border border-white/50 object-cover"
+                className="w-8 h-8 sm:w-10 sm:h-10 rounded-full border border-white/50 object-cover shrink-0"
                 onError={(e) => {
                   e.currentTarget.style.display = 'none';
                 }}
@@ -115,7 +115,7 @@ export const Leaderboard: React.FC<LeaderboardProps> = ({
 
             {/* Player info */}
             <div className="flex-1 min-w-0">
-              <p className="text-white font-semibold truncate">
+              <p className="text-white font-semibold text-sm sm:text-base truncate">
                 {entry.player_name}
               </p>
               <p className="text-white/60 text-xs">
@@ -124,8 +124,8 @@ export const Leaderboard: React.FC<LeaderboardProps> = ({
             </div>
 
             {/* Score */}
-            <div className="text-right">
-              <p className="text-white font-bold text-lg">{entry.score}</p>
+            <div className="text-right shrink-0">
+              <p className="text-white font-bold text-base sm:text-lg">{entry.score}</p>
             </div>
           </div>
         ))}

@@ -193,11 +193,11 @@ export const GameContainer: React.FC<GameContainerProps> = ({
   }, []);
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-purple-600 via-blue-600 to-pink-600 flex items-center justify-center p-4">
+    <div className="min-h-screen bg-gradient-to-br from-purple-600 via-blue-600 to-pink-600 flex items-center justify-center p-2 sm:p-4">
       <div className="max-w-md w-full">
         {/* Header */}
-        <div className="text-center mb-6">
-          <h1 className="text-4xl font-bold text-white drop-shadow-lg mb-2">
+        <div className="text-center mb-4 sm:mb-6">
+          <h1 className="text-2xl sm:text-4xl font-bold text-white drop-shadow-lg mb-1 sm:mb-2">
             {title}
           </h1>
           {gameState.phase !== 'IDLE' && (
@@ -211,7 +211,7 @@ export const GameContainer: React.FC<GameContainerProps> = ({
         </div>
 
         {/* Content */}
-        <div className="bg-white/10 backdrop-blur-md rounded-2xl p-6 shadow-2xl border border-white/20">
+        <div className="bg-white/10 backdrop-blur-md rounded-2xl p-4 sm:p-6 shadow-2xl border border-white/20">
           {/* IDLE: Avatar Upload */}
           {gameState.phase === 'IDLE' && (
             <div>
@@ -227,23 +227,23 @@ export const GameContainer: React.FC<GameContainerProps> = ({
 
           {/* READY: Game Setup */}
           {gameState.phase === 'READY' && playerImageRef.current && (
-            <div className="space-y-4">
-              <div className="flex justify-center mb-4">
+            <div className="space-y-3 sm:space-y-4">
+              <div className="flex justify-center mb-2 sm:mb-4">
                 <img
                   src={previewImageSrc || ''}
                   alt="Your avatar"
-                  className="w-20 h-20 rounded-full border-4 border-white shadow-lg"
+                  className="w-16 h-16 sm:w-20 sm:h-20 rounded-full border-4 border-white shadow-lg"
                 />
               </div>
               <button
                 onClick={handleGameStart}
-                className="w-full bg-green-500 hover:bg-green-600 text-white font-bold py-3 rounded-lg transition"
+                className="w-full bg-green-500 hover:bg-green-600 text-white font-bold py-2 sm:py-3 rounded-lg transition text-sm sm:text-base"
               >
                 🚀 Start Game
               </button>
               <button
                 onClick={handleUploadNew}
-                className="w-full bg-purple-500 hover:bg-purple-600 text-white font-bold py-2 rounded-lg transition text-sm"
+                className="w-full bg-purple-500 hover:bg-purple-600 text-white font-bold py-2 rounded-lg transition text-xs sm:text-sm"
               >
                 📤 Upload Different Image
               </button>
@@ -252,9 +252,9 @@ export const GameContainer: React.FC<GameContainerProps> = ({
 
           {/* PLAYING: Game Canvas */}
           {gameState.phase === 'PLAYING' && playerImageRef.current && (
-            <div className="space-y-4">
-              <div className="bg-black/20 rounded-lg p-3 text-center">
-                <p className="text-yellow-300 text-2xl font-bold">
+            <div className="space-y-3 sm:space-y-4">
+              <div className="bg-black/20 rounded-lg p-2 sm:p-3 text-center">
+                <p className="text-yellow-300 text-xl sm:text-2xl font-bold">
                   Score: {gameState.score}
                 </p>
               </div>
@@ -266,21 +266,21 @@ export const GameContainer: React.FC<GameContainerProps> = ({
                 onFlap={handleFlap}
               />
               <p className="text-white/80 text-center text-xs">
-                Press SPACE or click to flap!
+                Tap/click or press SPACE to flap!
               </p>
             </div>
           )}
 
           {/* GAMEOVER: Score Submission */}
           {gameState.phase === 'GAMEOVER' && (
-            <div className="space-y-4">
-              <div className="bg-red-500/30 rounded-lg p-4 text-center border-2 border-red-400">
-                <p className="text-white text-lg font-bold mb-2">Game Over!</p>
+            <div className="space-y-3 sm:space-y-4">
+              <div className="bg-red-500/30 rounded-lg p-3 sm:p-4 text-center border-2 border-red-400">
+                <p className="text-white text-base sm:text-lg font-bold mb-2">Game Over!</p>
                 <p className="text-white/90">
-                  Your Score: <span className="text-3xl font-bold text-yellow-300">{gameState.score}</span>
+                  Your Score: <span className="text-2xl sm:text-3xl font-bold text-yellow-300">{gameState.score}</span>
                 </p>
                 {gameState.score > gameState.highScore && (
-                  <p className="text-green-300 font-bold mt-2">🎉 New Personal Best!</p>
+                  <p className="text-green-300 font-bold mt-2 text-sm sm:text-base">🎉 New Personal Best!</p>
                 )}
               </div>
 
@@ -301,20 +301,20 @@ export const GameContainer: React.FC<GameContainerProps> = ({
                     playerName: e.target.value,
                   }))
                 }
-                className="w-full px-4 py-2 rounded-lg text-black"
+                className="w-full px-4 py-2 rounded-lg text-black text-sm sm:text-base"
               />
 
               <button
                 onClick={handleSubmitScore}
                 disabled={gameState.isSubmittingScore}
-                className="w-full bg-blue-500 hover:bg-blue-600 disabled:bg-gray-500 text-white font-bold py-2 rounded-lg transition"
+                className="w-full bg-blue-500 hover:bg-blue-600 disabled:bg-gray-500 text-white font-bold py-2 sm:py-2 rounded-lg transition text-sm sm:text-base"
               >
                 {gameState.isSubmittingScore ? 'Submitting...' : '📊 Submit Score'}
               </button>
 
               <button
                 onClick={handleRestart}
-                className="w-full bg-purple-500 hover:bg-purple-600 text-white font-bold py-2 rounded-lg transition"
+                className="w-full bg-purple-500 hover:bg-purple-600 text-white font-bold py-2 sm:py-2 rounded-lg transition text-sm sm:text-base"
               >
                 🔄 Play Again
               </button>
@@ -334,10 +334,10 @@ export const GameContainer: React.FC<GameContainerProps> = ({
         </div>
 
         {/* Leaderboard Toggle */}
-        <div className="mt-4 text-center">
+        <div className="mt-3 sm:mt-4 text-center">
           <button
             onClick={() => setShowLeaderboard(!showLeaderboard)}
-            className="text-white hover:text-yellow-300 font-bold transition"
+            className="text-white hover:text-yellow-300 font-bold transition text-sm sm:text-base"
           >
             {showLeaderboard ? '↓ Hide Leaderboard' : '↑ View Leaderboard'}
           </button>
@@ -345,7 +345,7 @@ export const GameContainer: React.FC<GameContainerProps> = ({
 
         {/* Leaderboard */}
         {showLeaderboard && (
-          <div className="mt-4 bg-white/10 backdrop-blur-md rounded-2xl p-6 shadow-2xl border border-white/20">
+          <div className="mt-3 sm:mt-4 bg-white/10 backdrop-blur-md rounded-2xl p-4 sm:p-6 shadow-2xl border border-white/20">
             <Leaderboard
               playerName={
                 gameState.playerName && gameState.phase === 'GAMEOVER'

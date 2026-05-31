@@ -59,6 +59,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
   onFlap,
 }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
   const [gameRunning, setGameRunning] = useState(false);
 
   // Game state refs (persistent across renders)
@@ -85,7 +86,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
   const canvasContextRef = useRef<CanvasContext | null>(null);
 
   /**
-   * Initialize high-DPI canvas
+   * Initialize high-DPI canvas with responsive sizing
    */
   const initializeCanvas = useCallback(() => {
     const canvas = canvasRef.current;
@@ -96,13 +97,9 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
 
     const dpr = window.devicePixelRatio || 1;
 
-    // Set canvas size accounting for DPI
+    // Internal resolution stays fixed for consistent physics
     canvas.width = CANVAS_WIDTH * dpr;
     canvas.height = CANVAS_HEIGHT * dpr;
-
-    // CSS size (display size)
-    canvas.style.width = `${CANVAS_WIDTH}px`;
-    canvas.style.height = `${CANVAS_HEIGHT}px`;
 
     // Scale context to match DPI
     ctx.scale(dpr, dpr);
@@ -294,7 +291,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
   }, [gameRunning, update, draw]);
 
   /**
-   * Keyboard & click controls
+   * Keyboard, click & touch controls
    */
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -308,12 +305,20 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       flap();
     };
 
+    const handleTouch = (e: TouchEvent) => {
+      e.preventDefault();
+      flap();
+    };
+
     window.addEventListener('keydown', handleKeyDown);
-    canvasRef.current?.addEventListener('click', handleClick);
+    const canvas = canvasRef.current;
+    canvas?.addEventListener('click', handleClick);
+    canvas?.addEventListener('touchstart', handleTouch, { passive: false });
 
     return () => {
       window.removeEventListener('keydown', handleKeyDown);
-      canvasRef.current?.removeEventListener('click', handleClick);
+      canvas?.removeEventListener('click', handleClick);
+      canvas?.removeEventListener('touchstart', handleTouch);
     };
   }, [flap]);
 
@@ -326,11 +331,13 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
   }, []);
 
   return (
-    <canvas
-      ref={canvasRef}
-      className="w-full max-w-[400px] h-auto border-4 border-white rounded-lg shadow-xl cursor-pointer"
-      style={{ background: 'linear-gradient(to bottom, #87ceeb 0%, #e0f6ff 100%)' }}
-    />
+    <div ref={containerRef} className="w-full max-w-[400px] mx-auto">
+      <canvas
+        ref={canvasRef}
+        className="w-full aspect-[2/3] border-4 border-white rounded-lg shadow-xl cursor-pointer touch-none"
+        style={{ background: 'linear-gradient(to bottom, #87ceeb 0%, #e0f6ff 100%)' }}
+      />
+    </div>
   );
 };
 

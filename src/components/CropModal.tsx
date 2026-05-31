@@ -151,8 +151,8 @@ export const CropModal: React.FC<CropModalProps> = ({
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-      <div className="bg-gradient-to-br from-purple-600 to-pink-600 rounded-2xl p-8 max-w-md w-full shadow-2xl">
-        <h2 className="text-white text-2xl font-bold mb-4 text-center">
+      <div className="bg-gradient-to-br from-purple-600 to-pink-600 rounded-2xl p-4 sm:p-8 max-w-md w-full shadow-2xl mx-2">
+        <h2 className="text-white text-xl sm:text-2xl font-bold mb-4 text-center">
           Position Your Avatar
         </h2>
 
@@ -164,18 +164,14 @@ export const CropModal: React.FC<CropModalProps> = ({
         <div className="flex justify-center mb-6">
           <canvas
             ref={canvasRef}
-            className="border-4 border-white rounded-full shadow-lg"
-            style={{
-              width: `${CROP_PREVIEW_SIZE}px`,
-              height: `${CROP_PREVIEW_SIZE}px`,
-            }}
+            className="border-4 border-white rounded-full shadow-lg w-full max-w-[300px] aspect-square"
           />
         </div>
 
         {/* Sliders */}
-        <div className="space-y-4 bg-black/20 p-4 rounded-lg mb-6">
+        <div className="space-y-3 sm:space-y-4 bg-black/20 p-3 sm:p-4 rounded-lg mb-4 sm:mb-6">
           <div>
-            <label className="text-white/80 text-xs block mb-2">
+            <label className="text-white/80 text-xs block mb-1 sm:mb-2">
               Move Left/Right
             </label>
             <input
@@ -191,7 +187,7 @@ export const CropModal: React.FC<CropModalProps> = ({
           </div>
 
           <div>
-            <label className="text-white/80 text-xs block mb-2">
+            <label className="text-white/80 text-xs block mb-1 sm:mb-2">
               Move Up/Down
             </label>
             <input
@@ -207,7 +203,7 @@ export const CropModal: React.FC<CropModalProps> = ({
           </div>
 
           <div>
-            <label className="text-white/80 text-xs block mb-2">Zoom</label>
+            <label className="text-white/80 text-xs block mb-1 sm:mb-2">Zoom</label>
             <div className="flex gap-2">
               <button
                 onClick={() =>
@@ -239,16 +235,16 @@ export const CropModal: React.FC<CropModalProps> = ({
         </div>
 
         {/* Controls */}
-        <div className="flex gap-3">
+        <div className="flex gap-2 sm:gap-3">
           <button
             onClick={handleConfirm}
-            className="flex-1 bg-green-500 hover:bg-green-600 text-white font-bold py-2 rounded-lg transition"
+            className="flex-1 bg-green-500 hover:bg-green-600 text-white font-bold py-2 sm:py-2 rounded-lg transition text-sm sm:text-base"
           >
             ✓ Use This
           </button>
           <button
             onClick={onCancel}
-            className="flex-1 bg-red-500 hover:bg-red-600 text-white font-bold py-2 rounded-lg transition"
+            className="flex-1 bg-red-500 hover:bg-red-600 text-white font-bold py-2 sm:py-2 rounded-lg transition text-sm sm:text-base"
           >
             ✕ Change
           </button>
