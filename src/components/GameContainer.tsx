@@ -56,11 +56,13 @@ export const GameContainer: React.FC = () => {
 
   const handleGameOver = useCallback((finalScore: number) => {
     setScore(finalScore)
-    const best = Math.max(highScore, finalScore)
-    setHighScore(best)
-    localStorage.setItem('flappyAvatar_best', String(best))
+    setHighScore(prev => {
+      const best = Math.max(prev, finalScore)
+      localStorage.setItem('flappyAvatar_best', String(best))
+      return best
+    })
     setShowSubmit(true)
-  }, [highScore])
+  }, [])
 
   const handleRestart = useCallback(() => {
     setShowSubmit(false)

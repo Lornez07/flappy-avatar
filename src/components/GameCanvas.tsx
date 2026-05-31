@@ -166,7 +166,7 @@ export const GameCanvas: React.FC<Props> = ({
       obstacles(ctx, pipes.current)
       ground(ctx, groundOff.current)
 
-      drawAvatar(ctx, pl, avatarSkin, photoImage, neonColor, neonPulse.current)
+      drawAvatar(ctx, pl, avatarSkin, avatarConfig.type === 'photo', photoImage, neonColor, neonPulse.current)
 
       particles.current.forEach(pt => {
         ctx.globalAlpha = pt.life * 0.6
@@ -181,12 +181,16 @@ export const GameCanvas: React.FC<Props> = ({
       if (scr === 'GAME_OVER') drawGameOver(ctx, score.current, best.current)
     }
 
-    function loop() { tick(); render(); requestAnimationFrame(loop) }
+    let raf: number
+    function loop() { tick(); render(); raf = requestAnimationFrame(loop) }
+    raf = requestAnimationFrame(loop)
 
     const clean = bindEvents(canvas, onInput)
-    loop()
 
-    return () => clean.forEach(fn => fn())
+    return () => {
+      cancelAnimationFrame(raf)
+      clean.forEach(fn => fn())
+    }
   }, [avatarConfig, photoImage, onScore, onGameOver, onRestart])
 
   return (
@@ -312,6 +316,7 @@ function drawAvatar(
   ctx: CanvasRenderingContext2D,
   pl: PlayerPhysics,
   skin: { emoji: string },
+  isPhoto: boolean,
   photoImage: HTMLImageElement | null,
   neon: { hex: string; glow: string },
   pulse: number,
@@ -343,17 +348,19 @@ function drawAvatar(
   ctx.arc(0, 0, r - 1, 0, Math.PI * 2)
   ctx.clip()
 
-  if (photoImage && skin.emoji === '😎') {
+  if (isPhoto && photoImage) {
     ctx.drawImage(photoImage, -r + 1, -r + 1, (r - 1) * 2, (r - 1) * 2)
   }
 
   ctx.restore()
 
-  ctx.font = `${r * 1.1}px serif`
-  ctx.textAlign = 'center'
-  ctx.textBaseline = 'middle'
-  ctx.fillStyle = '#fff'
-  ctx.fillText(skin.emoji, 0, 1)
+  if (!isPhoto) {
+    ctx.font = `${r * 1.1}px serif`
+    ctx.textAlign = 'center'
+    ctx.textBaseline = 'middle'
+    ctx.fillStyle = '#fff'
+    ctx.fillText(skin.emoji, 0, 1)
+  }
 
   ctx.shadowBlur = 4
   ctx.beginPath()
