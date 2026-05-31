@@ -1,5 +1,6 @@
 import React, { useEffect, useRef } from 'react'
 import { PlayerPhysics, PhysicsConfig, Pipe, PipeConfig, AvatarConfig, AVATAR_SKINS, NEON_COLORS } from '../types'
+import { playFlap, playScore, playHit } from '../lib/audio'
 
 interface Props {
   avatarConfig: AvatarConfig
@@ -85,6 +86,7 @@ export const GameCanvas: React.FC<Props> = ({
       if (screen.current === 'PLAYING') {
         const pl = p.current
         if (pl.y + pl.height / 2 > H - GROUND_H) return
+        playFlap()
         pl.velocityY = PHYSICS.flapStrength
         pl.rotation = PHYSICS.rotationFlap
         for (let i = 0; i < 8; i++) {
@@ -119,6 +121,7 @@ export const GameCanvas: React.FC<Props> = ({
       pl.rotation += (target - pl.rotation) * PHYSICS.rotationLerpSpeed
 
       if (pl.y + pl.height / 2 > H - GROUND_H || pl.y - pl.height / 2 < 0) {
+        playHit()
         screen.current = 'GAME_OVER'
         const fs = score.current
         best.current = Math.max(best.current, fs)
@@ -140,10 +143,11 @@ export const GameCanvas: React.FC<Props> = ({
         pipe.x -= PIPE.speed
 
         if (!pipe.scored && pipe.x + pipe.width < pl.x - pl.width / 2) {
-          score.current++; pipe.scored = true; onScore(score.current)
+          score.current++; pipe.scored = true; playScore(); onScore(score.current)
         }
 
         if (hit(pl, pipe, H - GROUND_H)) {
+          playHit()
           screen.current = 'GAME_OVER'
           const fs = score.current
           best.current = Math.max(best.current, fs)
