@@ -12,6 +12,14 @@ interface Props {
 
 const RANK_COLORS = ['#ffd700', '#c0c0c0', '#cd7f32']
 
+const AVATAR_COLORS = ['#00f0ff', '#ff00e6', '#00ff66', '#ffd700', '#ff0044', '#4488ff', '#8800ff', '#ff8844', '#44ff88', '#ff4488']
+
+function stringToColor(s: string): string {
+  let hash = 0
+  for (let i = 0; i < s.length; i++) hash = s.charCodeAt(i) + ((hash << 5) - hash)
+  return AVATAR_COLORS[Math.abs(hash) % AVATAR_COLORS.length]
+}
+
 export const Leaderboard: React.FC<Props> = ({ playerName, limit = 10 }) => {
   const [entries, setEntries] = useState<LeaderboardEntry[]>([])
   const [playerRank, setPlayerRank] = useState<number | null>(null)
@@ -91,14 +99,16 @@ export const Leaderboard: React.FC<Props> = ({ playerName, limit = 10 }) => {
                 {rankColor && i < 3 ? ['🥇', '🥈', '🥉'][i] : `#${i + 1}`}
               </span>
 
-              {e.avatar_url && (
-                <img
-                  src={e.avatar_url}
-                  alt=""
-                  className="w-6 h-6 rounded-full border border-white/10 object-cover shrink-0"
-                  onError={e => (e.currentTarget.style.display = 'none')}
-                />
-              )}
+              <div className="w-6 h-6 rounded-full shrink-0 relative flex items-center justify-center text-[10px] font-bold overflow-hidden border border-white/10"
+                style={{ background: stringToColor(e.player_name) }}
+              >
+                {e.avatar_url ? (
+                  <img src={e.avatar_url} alt="" className="w-full h-full object-cover relative z-10"
+                    onError={e => { (e.currentTarget as HTMLImageElement).style.display = 'none' }}
+                  />
+                ) : null}
+                <span className="absolute inset-0 flex items-center justify-center text-white/90">{e.player_name[0]?.toUpperCase() || '?'}</span>
+              </div>
 
               <span className="flex-1 text-sm text-white/70 truncate min-w-0">
                 {e.player_name}
