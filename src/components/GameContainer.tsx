@@ -26,10 +26,10 @@ export const GameContainer: React.FC = () => {
     const s = localStorage.getItem('flappyAvatar_best')
     return s ? parseInt(s) : 0
   })
-  const [showLeaderboard, setShowLeaderboard] = useState(false)
-  const [playerName, setPlayerName] = useState('')
+  const [playerName, setPlayerName] = useState(() => localStorage.getItem('flappyAvatar_name') || '')
   const [submitting, setSubmitting] = useState(false)
   const [submitError, setSubmitError] = useState<string | null>(null)
+  const [submitted, setSubmitted] = useState(false)
   const [showSubmit, setShowSubmit] = useState(false)
 
   const originalImageRef = useRef<HTMLImageElement | null>(null)
@@ -61,13 +61,15 @@ export const GameContainer: React.FC = () => {
       localStorage.setItem('flappyAvatar_best', String(best))
       return best
     })
+    setSubmitted(false)
+    setSubmitError(null)
     setShowSubmit(true)
   }, [])
 
   const handleRestart = useCallback(() => {
     setShowSubmit(false)
     setSubmitError(null)
-    setPlayerName('')
+    setSubmitted(false)
   }, [])
 
   const handleSubmitScore = useCallback(async () => {
@@ -75,6 +77,7 @@ export const GameContainer: React.FC = () => {
     setSubmitting(true)
     setSubmitError(null)
     try {
+      localStorage.setItem('flappyAvatar_name', playerName.trim())
       const avatarUrl = photoImage?.src
         ? await uploadAvatarToStorage(photoImage.src, playerName.trim()) ?? undefined
         : undefined
@@ -86,7 +89,7 @@ export const GameContainer: React.FC = () => {
       }
       await fetchPlayerBest(playerName.trim())
       setSubmitting(false)
-      setShowLeaderboard(true)
+      setSubmitted(true)
     } catch {
       setSubmitError('Failed to submit score')
       setSubmitting(false)
@@ -94,6 +97,7 @@ export const GameContainer: React.FC = () => {
   }, [playerName, score, photoImage])
 
   const showPhoto = avatarConfig.type === 'photo' && photoImage
+  const isNewBest = score >= highScore && score > 0
 
   return (
     <div
@@ -114,82 +118,82 @@ export const GameContainer: React.FC = () => {
           highScore={highScore}
         />
 
-        <div className="bg-white/5 backdrop-blur-xl rounded-2xl p-4 border border-white/10 shadow-2xl space-y-3">
-          <AvatarPicker
-            config={avatarConfig}
-            onChange={handleConfigChange}
-            onUploadClick={() => document.getElementById('avatar-upload-input')?.click()}
-          />
+        {showSubmit ? (
+          <div className="bg-white/5 backdrop-blur-xl rounded-2xl p-4 border border-white/10 shadow-2xl space-y-3">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-xs text-white/40 font-semibold tracking-wider uppercase">Score</p>
+                <p className="text-2xl font-bold text-white">{score}</p>
+              </div>
+              <div className="text-right">
+                <p className="text-xs text-white/40 font-semibold tracking-wider uppercase">Best</p>
+                <p className="text-2xl font-bold text-cyan-400">{highScore}</p>
+              </div>
+            </div>
 
-          <input
-            id="avatar-upload-input"
-            type="file"
-            accept="image/*"
-            className="hidden"
-            onChange={e => {
-              const file = e.target.files?.[0]
-              if (!file) return
-              const reader = new FileReader()
-              reader.onload = ev => {
-                const img = new Image()
-                img.onload = () => handleImageSelected(img)
-                img.src = ev.target?.result as string
-              }
-              reader.readAsDataURL(file)
-            }}
-          />
+            {isNewBest && (
+              <p className="text-center text-amber-400 text-sm font-bold">New Personal Best!</p>
+            )}
 
-          {showSubmit && (
-            <div className="pt-3 border-t border-white/10 space-y-2">
-              <input
-                type="text"
-                placeholder="Enter your name for the leaderboard"
-                maxLength={50}
-                value={playerName}
-                onChange={e => setPlayerName(e.target.value)}
-                className="w-full px-3 py-2.5 rounded-xl bg-black/30 border border-white/10 text-white text-sm placeholder-white/30 focus:outline-none focus:border-cyan-400/50 transition"
-              />
-              {submitError && (
-                <p className="text-red-400 text-xs">{submitError}</p>
-              )}
-              <div className="flex gap-2">
+            {!submitted ? (
+              <>
+                <input
+                  type="text"
+                  placeholder="Enter your name"
+                  maxLength={50}
+                  value={playerName}
+                  onChange={e => setPlayerName(e.target.value)}
+                  className="w-full px-3 py-2.5 rounded-xl bg-black/30 border border-white/10 text-white text-sm placeholder-white/30 focus:outline-none focus:border-cyan-400/50 transition"
+                />
+                {submitError && (
+                  <p className="text-red-400 text-xs">{submitError}</p>
+                )}
                 <button
                   onClick={handleSubmitScore}
                   disabled={submitting}
-                  className="flex-1 bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 disabled:opacity-40 text-white font-bold py-2.5 rounded-xl text-sm transition-all duration-200 shadow-lg shadow-cyan-500/20"
+                  className="w-full bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 disabled:opacity-40 text-white font-bold py-2.5 rounded-xl text-sm transition-all duration-200 shadow-lg shadow-cyan-500/20"
                 >
                   {submitting ? 'Submitting...' : 'Submit Score'}
                 </button>
-                <button
-                  onClick={() => setShowLeaderboard(!showLeaderboard)}
-                  className="px-4 bg-white/10 hover:bg-white/20 text-white rounded-xl text-sm font-bold transition-all duration-200"
-                >
-                  🏆
-                </button>
-              </div>
-            </div>
-          )}
+              </>
+            ) : (
+              <p className="text-center text-green-400 text-sm font-semibold">Score submitted!</p>
+            )}
 
-          {!showSubmit && (
-            <div className="pt-2 text-center">
-              <button
-                onClick={() => setShowLeaderboard(!showLeaderboard)}
-                className="text-white/30 hover:text-white/60 text-xs font-semibold tracking-wider uppercase transition"
-              >
-                {showLeaderboard ? 'Hide Leaderboard' : 'View Leaderboard'}
-              </button>
-            </div>
-          )}
-
-          {showLeaderboard && (
-            <div className="pt-3 border-t border-white/10">
+            <div className="pt-1 border-t border-white/10">
               <Leaderboard
-                playerName={showSubmit ? playerName : undefined}
+                playerName={playerName}
                 limit={10}
               />
             </div>
-          )}
-        </div>
+          </div>
+        ) : (
+          <div className="bg-white/5 backdrop-blur-xl rounded-2xl p-4 border border-white/10 shadow-2xl space-y-3">
+            <AvatarPicker
+              config={avatarConfig}
+              onChange={handleConfigChange}
+              onUploadClick={() => document.getElementById('avatar-upload-input')?.click()}
+            />
+
+            <input
+              id="avatar-upload-input"
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={e => {
+                const file = e.target.files?.[0]
+                if (!file) return
+                const reader = new FileReader()
+                reader.onload = ev => {
+                  const img = new Image()
+                  img.onload = () => handleImageSelected(img)
+                  img.src = ev.target?.result as string
+                }
+                reader.readAsDataURL(file)
+              }}
+            />
+          </div>
+        )}
       </div>
 
       {showCrop && originalImageRef.current && (
