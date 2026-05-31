@@ -5,7 +5,6 @@ import { GameCanvas } from './GameCanvas'
 import { Leaderboard } from './Leaderboard'
 import { AvatarConfig, AVATAR_SKINS } from '../types'
 import {
-  uploadAvatarToStorage,
   submitScore,
   fetchPlayerBest,
 } from '../lib/supabaseClient'
@@ -17,6 +16,15 @@ function emojiToDataUrl(emoji: string): string {
   cx.fillStyle = '#1a1a2e'; cx.beginPath(); cx.arc(20, 20, 18, 0, Math.PI * 2); cx.fill()
   cx.font = '22px serif'; cx.textAlign = 'center'; cx.textBaseline = 'middle'
   cx.fillStyle = '#fff'; cx.fillText(emoji, 20, 21)
+  return c.toDataURL()
+}
+
+function resizeImageToDataUrl(img: HTMLImageElement, size: number): string {
+  const c = document.createElement('canvas')
+  c.width = size; c.height = size
+  const cx = c.getContext('2d')!
+  cx.beginPath(); cx.arc(size / 2, size / 2, size / 2, 0, Math.PI * 2); cx.clip()
+  cx.drawImage(img, 0, 0, size, size)
   return c.toDataURL()
 }
 
@@ -89,9 +97,7 @@ export const GameContainer: React.FC = () => {
     try {
       localStorage.setItem('flappyAvatar_name', playerName.trim())
       const skin = AVATAR_SKINS.find(s => s.id === avatarConfig.skinId) ?? AVATAR_SKINS[0]
-      const avatarUrl = photoImage?.src
-        ? await uploadAvatarToStorage(photoImage.src, playerName.trim()) ?? emojiToDataUrl(skin.emoji)
-        : emojiToDataUrl(skin.emoji)
+      const avatarUrl = photoImage ? resizeImageToDataUrl(photoImage, 40) : emojiToDataUrl(skin.emoji)
       const result = await submitScore(playerName.trim(), score, avatarUrl)
       if (!result.success) {
         setSubmitError(result.error || 'Failed to submit')
