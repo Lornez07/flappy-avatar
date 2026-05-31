@@ -1,65 +1,50 @@
 import React, { useEffect, useRef } from 'react'
-import { PlayerPhysics, PhysicsConfig, Pipe, PipeConfig } from '../types'
+import { PlayerPhysics, PhysicsConfig, Pipe, PipeConfig, AvatarConfig, AVATAR_SKINS, NEON_COLORS } from '../types'
 
-interface GameCanvasProps {
-  playerImage: HTMLImageElement | null
-  onScore: (score: number) => void
-  onGameOver: (score: number) => void
+interface Props {
+  avatarConfig: AvatarConfig
+  photoImage: HTMLImageElement | null
+  onScore: (s: number) => void
+  onGameOver: (s: number) => void
   onRestart: () => void
   highScore: number
 }
 
 const PHYSICS: PhysicsConfig = {
-  gravity: 0.6,
-  flapStrength: -12,
-  maxVelocity: 15,
-  rotationFlap: -20,
-  rotationMax: 70,
-  rotationLerpSpeed: 0.08,
+  gravity: 0.55, flapStrength: -11, maxVelocity: 14,
+  rotationFlap: -22, rotationMax: 75, rotationLerpSpeed: 0.09,
 }
 
-const PIPE_CFG: PipeConfig = {
-  width: 52,
-  gap: 148,
-  spacing: 196,
-  minGapY: 60,
-  speed: 5,
+const PIPE: PipeConfig = {
+  width: 54, gap: 146, spacing: 190, minGapY: 60, speed: 5,
 }
 
-const CANVAS_W = 400
-const CANVAS_H = 600
-const AVATAR_SIZE = 36
-const GROUND_H = 100
-const PLAYER_X = 80
+const W = 400, H = 600, GROUND_H = 100, AVATAR_R = 18, PLAYER_X = 85
 
-type GameScreen = 'MENU' | 'PLAYING' | 'GAME_OVER'
+type Screen = 'MENU' | 'PLAYING' | 'GAME_OVER'
 
-export const GameCanvas: React.FC<GameCanvasProps> = ({
-  playerImage,
-  onScore,
-  onGameOver,
-  onRestart,
-  highScore,
+export const GameCanvas: React.FC<Props> = ({
+  avatarConfig, photoImage,
+  onScore, onGameOver, onRestart, highScore,
 }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null)
 
-  const screenRef = useRef<GameScreen>('MENU')
-  const playerRef = useRef<PlayerPhysics>({
-    x: PLAYER_X, y: CANVAS_H / 2 - GROUND_H / 2,
-    width: AVATAR_SIZE, height: AVATAR_SIZE,
-    velocityY: 0, rotation: 0, rotationVelocity: 0, hasFlapped: false,
+  const screen = useRef<Screen>('MENU')
+  const p = useRef<PlayerPhysics>({
+    x: PLAYER_X, y: H / 2 - GROUND_H / 2,
+    width: AVATAR_R * 2, height: AVATAR_R * 2,
+    velocityY: 0, rotation: 0, rotationVelocity: 0,
   })
-  const pipesRef = useRef<Pipe[]>([])
-  const scoreRef = useRef(0)
-  const bestRef = useRef(highScore)
-  const pipeTimerRef = useRef(0)
-  const groundOffsetRef = useRef(0)
-  const menuBobRef = useRef(0)
-  const flapParticlesRef = useRef<{ x: number; y: number; life: number }[]>([])
+  const pipes = useRef<Pipe[]>([])
+  const score = useRef(0)
+  const best = useRef(highScore)
+  const pipeTimer = useRef(0)
+  const groundOff = useRef(0)
+  const bob = useRef(0)
+  const particles = useRef<{ x: number; y: number; life: number; vx: number; vy: number }[]>([])
+  const neonPulse = useRef(0)
 
-  useEffect(() => {
-    bestRef.current = highScore
-  }, [highScore])
+  useEffect(() => { best.current = highScore }, [highScore])
 
   useEffect(() => {
     const canvas = canvasRef.current
@@ -68,403 +53,440 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
     if (!ctx) return
 
     const dpr = window.devicePixelRatio || 1
-    canvas.width = CANVAS_W * dpr
-    canvas.height = CANVAS_H * dpr
+    canvas.width = W * dpr
+    canvas.height = H * dpr
     ctx.scale(dpr, dpr)
     ctx.imageSmoothingEnabled = true
     ctx.imageSmoothingQuality = 'high'
 
-    const W = CANVAS_W, H = CANVAS_H
+    const neonColor = NEON_COLORS.find(c => c.id === avatarConfig.neonColorId) ?? NEON_COLORS[0]
+    const avatarSkin = AVATAR_SKINS.find(s => s.id === avatarConfig.skinId) ?? AVATAR_SKINS[0]
 
-    function resetGame() {
-      const p = playerRef.current
-      p.x = PLAYER_X
-      p.y = H / 2 - GROUND_H / 2
-      p.velocityY = 0
-      p.rotation = 0
-      p.rotationVelocity = 0
-      p.hasFlapped = false
-      pipesRef.current = []
-      scoreRef.current = 0
-      pipeTimerRef.current = 0
-      flapParticlesRef.current = []
-      screenRef.current = 'MENU'
+    function reset() {
+      const pl = p.current
+      pl.x = PLAYER_X; pl.y = H / 2 - GROUND_H / 2
+      pl.velocityY = 0; pl.rotation = 0; pl.rotationVelocity = 0
+      pipes.current = []; score.current = 0; pipeTimer.current = 0
+      particles.current = []; screen.current = 'MENU'
     }
 
-    function flap() {
-      const screen = screenRef.current
-      if (screen === 'MENU') {
-        screenRef.current = 'PLAYING'
-        const p = playerRef.current
-        p.velocityY = PHYSICS.flapStrength
-        p.rotation = PHYSICS.rotationFlap
-        p.rotationVelocity = 0
-        p.hasFlapped = true
+    function onInput() {
+      if (screen.current === 'MENU') {
+        screen.current = 'PLAYING'
+        const pl = p.current
+        pl.velocityY = PHYSICS.flapStrength
+        pl.rotation = PHYSICS.rotationFlap
         return
       }
-      if (screen === 'GAME_OVER') {
-        resetGame()
-        onRestart()
-        return
+      if (screen.current === 'GAME_OVER') {
+        reset(); onRestart(); return
       }
-      if (screen === 'PLAYING') {
-        const p = playerRef.current
-        if (p.y + p.height / 2 > H - GROUND_H) return
-        p.velocityY = PHYSICS.flapStrength
-        p.rotation = PHYSICS.rotationFlap
-        p.rotationVelocity = 0
-        p.hasFlapped = true
-        flapParticlesRef.current.push({ x: p.x, y: p.y, life: 1 })
+      if (screen.current === 'PLAYING') {
+        const pl = p.current
+        if (pl.y + pl.height / 2 > H - GROUND_H) return
+        pl.velocityY = PHYSICS.flapStrength
+        pl.rotation = PHYSICS.rotationFlap
+        for (let i = 0; i < 8; i++) {
+          particles.current.push({
+            x: pl.x - 10, y: pl.y,
+            life: 1, vx: -2 - Math.random() * 3, vy: -2 + Math.random() * 4,
+          })
+        }
       }
     }
 
-    function update() {
-      const screen = screenRef.current
-      const p = playerRef.current
+    function tick() {
+      const scr = screen.current
+      const pl = p.current
 
-      groundOffsetRef.current = (groundOffsetRef.current + PIPE_CFG.speed) % 24
+      groundOff.current = (groundOff.current + PIPE.speed) % 24
+      neonPulse.current += 0.03
 
-      if (screen === 'MENU') {
-        menuBobRef.current += 0.04
-        p.y = (H / 2 - GROUND_H / 2) + Math.sin(menuBobRef.current) * 8
+      if (scr === 'MENU') {
+        bob.current += 0.04
+        pl.y = (H / 2 - GROUND_H / 2) + Math.sin(bob.current) * 8
+        return
+      }
+      if (scr === 'GAME_OVER') return
+
+      pl.velocityY = Math.min(pl.velocityY + PHYSICS.gravity, PHYSICS.maxVelocity)
+      pl.y += pl.velocityY
+
+      const target = pl.velocityY > 0 ? PHYSICS.rotationMax : PHYSICS.rotationFlap
+      pl.rotation += (target - pl.rotation) * PHYSICS.rotationLerpSpeed
+
+      if (pl.y + pl.height / 2 > H - GROUND_H || pl.y - pl.height / 2 < 0) {
+        screen.current = 'GAME_OVER'
+        const fs = score.current
+        best.current = Math.max(best.current, fs)
+        onGameOver(fs)
         return
       }
 
-      if (screen === 'GAME_OVER') return
-
-      p.velocityY = Math.min(p.velocityY + PHYSICS.gravity, PHYSICS.maxVelocity)
-      p.y += p.velocityY
-
-      const targetRot = p.velocityY > 0 ? PHYSICS.rotationMax : PHYSICS.rotationFlap
-      p.rotation += (targetRot - p.rotation) * PHYSICS.rotationLerpSpeed
-
-      if (p.y + p.height / 2 > H - GROUND_H || p.y - p.height / 2 < 0) {
-        screenRef.current = 'GAME_OVER'
-        const finalScore = scoreRef.current
-        bestRef.current = Math.max(bestRef.current, finalScore)
-        onGameOver(finalScore)
-        return
+      pipeTimer.current++
+      if (pipeTimer.current > PIPE.spacing) {
+        const minY = PIPE.minGapY
+        const maxY = H - GROUND_H - PIPE.gap - PIPE.minGapY
+        const gs = minY + Math.random() * (maxY - minY)
+        pipes.current.push({ x: W, gapStart: gs, gapEnd: gs + PIPE.gap, scored: false, width: PIPE.width })
+        pipeTimer.current = 0
       }
 
-      pipeTimerRef.current++
-      if (pipeTimerRef.current > PIPE_CFG.spacing) {
-        const minY = PIPE_CFG.minGapY
-        const maxY = H - GROUND_H - PIPE_CFG.gap - PIPE_CFG.minGapY
-        const gapStart = minY + Math.random() * (maxY - minY)
-        pipesRef.current.push({
-          x: W, gapStart, gapEnd: gapStart + PIPE_CFG.gap,
-          scored: false, width: PIPE_CFG.width,
-        })
-        pipeTimerRef.current = 0
-      }
+      for (let i = pipes.current.length - 1; i >= 0; i--) {
+        const pipe = pipes.current[i]
+        pipe.x -= PIPE.speed
 
-      for (let i = pipesRef.current.length - 1; i >= 0; i--) {
-        const pipe = pipesRef.current[i]
-        pipe.x -= PIPE_CFG.speed
-
-        if (!pipe.scored && pipe.x + pipe.width < p.x - p.width / 2) {
-          scoreRef.current++
-          pipe.scored = true
-          onScore(scoreRef.current)
+        if (!pipe.scored && pipe.x + pipe.width < pl.x - pl.width / 2) {
+          score.current++; pipe.scored = true; onScore(score.current)
         }
 
-        if (checkCollision(p, pipe, H - GROUND_H)) {
-          screenRef.current = 'GAME_OVER'
-          const finalScore = scoreRef.current
-          bestRef.current = Math.max(bestRef.current, finalScore)
-          onGameOver(finalScore)
+        if (hit(pl, pipe, H - GROUND_H)) {
+          screen.current = 'GAME_OVER'
+          const fs = score.current
+          best.current = Math.max(best.current, fs)
+          onGameOver(fs)
           return
         }
-
-        if (pipe.x + pipe.width < 0) pipesRef.current.splice(i, 1)
+        if (pipe.x + pipe.width < 0) pipes.current.splice(i, 1)
       }
 
-      flapParticlesRef.current = flapParticlesRef.current
-        .map(pt => ({ ...pt, life: pt.life - 0.04 }))
+      particles.current = particles.current
+        .map(pt => ({ ...pt, x: pt.x + pt.vx, y: pt.y + pt.vy, life: pt.life - 0.035 }))
         .filter(pt => pt.life > 0)
     }
 
-    function draw() {
-      const screen = screenRef.current
-      const p = playerRef.current
+    function render() {
+      const scr = screen.current
+      const pl = p.current
 
       ctx.clearRect(0, 0, W, H)
 
-      drawSky(ctx, W, H)
-      drawClouds(ctx, W, groundOffsetRef.current)
-      drawPipes(ctx, pipesRef.current)
-      drawGround(ctx, W, H, GROUND_H, groundOffsetRef.current)
+      sky(ctx)
+      clouds(ctx, groundOff.current)
+      obstacles(ctx, pipes.current)
+      ground(ctx, groundOff.current)
 
-      if (playerImage) {
-        drawAvatar(ctx, playerImage, p, AVATAR_SIZE)
-      }
+      drawAvatar(ctx, pl, avatarSkin, photoImage, neonColor, neonPulse.current)
 
-      drawFlapParticles(ctx, flapParticlesRef.current)
+      particles.current.forEach(pt => {
+        ctx.globalAlpha = pt.life * 0.6
+        ctx.fillStyle = neonColor.hex
+        ctx.beginPath(); ctx.arc(pt.x, pt.y, 3 * pt.life, 0, Math.PI * 2); ctx.fill()
+        ctx.globalAlpha = 1
+      })
 
-      drawScore(ctx, W, scoreRef.current, screen)
+      drawScore(ctx, score.current, scr)
 
-      if (screen === 'MENU') {
-        drawMenuOverlay(ctx, W, H, GROUND_H)
-      }
-
-      if (screen === 'GAME_OVER') {
-        drawGameOver(ctx, W, H, GROUND_H, scoreRef.current, bestRef.current)
-      }
+      if (scr === 'MENU') drawMenu(ctx)
+      if (scr === 'GAME_OVER') drawGameOver(ctx, score.current, best.current)
     }
 
-    function loop() {
-      update()
-      draw()
-      requestAnimationFrame(loop)
-    }
+    function loop() { tick(); render(); requestAnimationFrame(loop) }
 
-    const events = setupEvents(canvas, flap)
+    const clean = bindEvents(canvas, onInput)
     loop()
 
-    return () => {
-      events.forEach(fn => fn())
-    }
-  }, [playerImage, onScore, onGameOver, onRestart])
+    return () => clean.forEach(fn => fn())
+  }, [avatarConfig, photoImage, onScore, onGameOver, onRestart])
 
   return (
-    <div className="w-full max-w-[400px] mx-auto">
+    <div className="w-full max-w-[400px] mx-auto select-none" style={{ WebkitUserSelect: 'none', userSelect: 'none' }}>
       <canvas
         ref={canvasRef}
-        className="w-full aspect-[2/3] shadow-xl cursor-pointer touch-none"
+        className="w-full aspect-[2/3] shadow-2xl cursor-pointer touch-none rounded-2xl"
       />
     </div>
   )
 }
 
-// ===== DRAWING HELPERS =====
+function sky(ctx: CanvasRenderingContext2D) {
+  const g = ctx.createLinearGradient(0, 0, 0, H)
+  g.addColorStop(0, '#0f0c29')
+  g.addColorStop(0.4, '#1a1a4e')
+  g.addColorStop(0.7, '#243b80')
+  g.addColorStop(1, '#4a6fa5')
+  ctx.fillStyle = g; ctx.fillRect(0, 0, W, H)
 
-function drawSky(ctx: CanvasRenderingContext2D, w: number, h: number) {
-  const g = ctx.createLinearGradient(0, 0, 0, h)
-  g.addColorStop(0, '#4dc9f6')
-  g.addColorStop(1, '#aee4f7')
-  ctx.fillStyle = g
-  ctx.fillRect(0, 0, w, h)
+  for (let i = 0; i < 30; i++) {
+    const x = (i * 37 + 13) % W
+    const y = (i * 53 + 7) % (H - GROUND_H)
+    const r = 0.5 + (i % 3) * 0.4
+    ctx.globalAlpha = 0.3 + (i % 5) * 0.1
+    ctx.fillStyle = '#fff'
+    ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill()
+  }
+  ctx.globalAlpha = 1
 }
 
-function drawClouds(ctx: CanvasRenderingContext2D, w: number, offset: number) {
-  ctx.fillStyle = 'rgba(255,255,255,0.4)'
-  const clouds = [
-    { x: 40, y: 60, r1: 20, r2: 16 },
-    { x: 90, y: 55, r1: 24, r2: 18 },
-    { x: 300, y: 80, r1: 18, r2: 14 },
-    { x: 350, y: 75, r1: 22, r2: 16 },
-    { x: 180, y: 110, r1: 15, r2: 12 },
+function clouds(ctx: CanvasRenderingContext2D, off: number) {
+  ctx.globalAlpha = 0.08
+  ctx.fillStyle = '#fff'
+  const list = [
+    { x: 30, y: 50, w: 80, h: 16 },
+    { x: 180, y: 30, w: 100, h: 14 },
+    { x: 300, y: 70, w: 60, h: 12 },
+    { x: 100, y: 100, w: 90, h: 18 },
   ]
-  const speed = 0.3
-  for (const c of clouds) {
-    const cx = ((c.x + offset * speed) % (w + 100)) - 50
+  const speed = 0.2
+  for (const c of list) {
+    const cx = ((c.x + off * speed) % (W + 150)) - 75
     ctx.beginPath()
-    ctx.ellipse(cx, c.y, c.r1, c.r2, 0, 0, Math.PI * 2)
+    ctx.ellipse(cx, c.y, c.w / 2, c.h / 2, 0, 0, Math.PI * 2)
     ctx.fill()
   }
+  ctx.globalAlpha = 1
 }
 
-function drawGround(ctx: CanvasRenderingContext2D, w: number, h: number, gh: number, offset: number) {
-  const gy = h - gh
+function ground(ctx: CanvasRenderingContext2D, off: number) {
+  const gy = H - GROUND_H
 
-  ctx.fillStyle = '#ded895'
-  ctx.fillRect(0, gy, w, gh)
+  ctx.fillStyle = '#0d1117'
+  ctx.fillRect(0, gy, W, GROUND_H)
 
-  ctx.fillStyle = '#5a4a32'
-  ctx.fillRect(0, gy + 8, w, gh - 8)
+  const g2 = ctx.createLinearGradient(0, gy, 0, gy + 4)
+  g2.addColorStop(0, '#1a1a2e')
+  g2.addColorStop(1, '#16213e')
+  ctx.fillStyle = g2
+  ctx.fillRect(0, gy, W, 4)
 
-  ctx.fillStyle = '#7ec850'
-  ctx.fillRect(0, gy, w, 8)
-
-  ctx.strokeStyle = '#6ab040'
+  ctx.strokeStyle = 'rgba(0, 240, 255, 0.08)'
   ctx.lineWidth = 1
-  for (let x = -offset; x < w + 24; x += 24) {
+  for (let x = -off; x < W + 24; x += 24) {
     ctx.beginPath()
-    ctx.moveTo(x, gy)
-    ctx.lineTo(x + 12, gy - 4)
-    ctx.lineTo(x + 24, gy)
+    ctx.moveTo(x, gy + 4)
+    ctx.lineTo(x + 12, gy + 8)
+    ctx.lineTo(x + 24, gy + 4)
     ctx.stroke()
   }
 
-  ctx.fillStyle = '#5a4a32'
-  ctx.strokeStyle = '#4a3a22'
-  ctx.lineWidth = 1
-  for (let x = -offset; x < w + 24; x += 24) {
-    ctx.fillRect(x, gy + 8, 24, 3)
-    ctx.strokeRect(x, gy + 8, 24, 3)
+  ctx.fillStyle = 'rgba(0, 240, 255, 0.03)'
+  for (let x = -off; x < W + 24; x += 24) {
+    ctx.fillRect(x, gy + 8, 24, 2)
   }
+
+  ctx.fillStyle = 'rgba(0, 240, 255, 0.06)'
+  ctx.fillRect(0, H - 2, W, 2)
 }
 
-function drawPipes(ctx: CanvasRenderingContext2D, pipes: Pipe[]) {
+function obstacles(ctx: CanvasRenderingContext2D, pipes: Pipe[]) {
   for (const pipe of pipes) {
-    const capOverhang = 8
-    const capH = 22
+    const co = 8
+    const ch = 24
 
-    ctx.fillStyle = '#73bf2e'
+    ctx.shadowColor = 'rgba(0, 240, 255, 0.15)'
+    ctx.shadowBlur = 8
+
+    const grad1 = ctx.createLinearGradient(pipe.x, 0, pipe.x + pipe.width, 0)
+    grad1.addColorStop(0, '#1a3a5c')
+    grad1.addColorStop(0.5, '#2a5a8c')
+    grad1.addColorStop(1, '#1a3a5c')
+    ctx.fillStyle = grad1
     ctx.fillRect(pipe.x, 0, pipe.width, pipe.gapStart)
-    ctx.fillRect(pipe.x, pipe.gapEnd, pipe.width, CANVAS_H - pipe.gapEnd)
+    ctx.fillRect(pipe.x, pipe.gapEnd, pipe.width, H - pipe.gapEnd)
 
-    ctx.fillStyle = '#558b2f'
-    ctx.fillRect(pipe.x - capOverhang, pipe.gapStart - capH, pipe.width + capOverhang * 2, capH)
-    ctx.fillRect(pipe.x - capOverhang, pipe.gapEnd, pipe.width + capOverhang * 2, capH)
+    ctx.shadowBlur = 12
+    const capGrad = ctx.createLinearGradient(pipe.x - co, 0, pipe.x + pipe.width + co * 2, 0)
+    capGrad.addColorStop(0, '#0f3460')
+    capGrad.addColorStop(0.5, '#1a5276')
+    capGrad.addColorStop(1, '#0f3460')
+    ctx.fillStyle = capGrad
+    ctx.fillRect(pipe.x - co, pipe.gapStart - ch, pipe.width + co * 2, ch)
+    ctx.fillRect(pipe.x - co, pipe.gapEnd, pipe.width + co * 2, ch)
 
-    ctx.fillStyle = '#4a7a28'
-    ctx.fillRect(pipe.x - capOverhang, pipe.gapStart - capH, pipe.width + capOverhang * 2, 3)
-    ctx.fillRect(pipe.x - capOverhang, pipe.gapEnd, pipe.width + capOverhang * 2, 3)
+    ctx.shadowBlur = 4
+    ctx.fillStyle = 'rgba(0, 240, 255, 0.08)'
+    ctx.fillRect(pipe.x + 6, ch, 4, pipe.gapStart - ch)
+    ctx.fillRect(pipe.x + 6, pipe.gapEnd + ch, 4, H - pipe.gapEnd - ch - GROUND_H)
 
-    ctx.fillStyle = '#5a9a25'
-    ctx.fillRect(pipe.x + 4, 0, 6, pipe.gapStart - capH)
-    ctx.fillRect(pipe.x + 4, pipe.gapEnd + capH, 6, CANVAS_H - pipe.gapEnd - capH)
+    ctx.shadowBlur = 0
+    ctx.shadowColor = 'transparent'
+
+    ctx.strokeStyle = 'rgba(0, 240, 255, 0.06)'
+    ctx.lineWidth = 1
+    ctx.strokeRect(pipe.x - co, pipe.gapStart - ch, pipe.width + co * 2, ch)
+    ctx.strokeRect(pipe.x - co, pipe.gapEnd, pipe.width + co * 2, ch)
   }
 }
 
 function drawAvatar(
   ctx: CanvasRenderingContext2D,
-  image: HTMLImageElement,
-  player: PlayerPhysics,
-  size: number,
+  pl: PlayerPhysics,
+  skin: { emoji: string },
+  photoImage: HTMLImageElement | null,
+  neon: { hex: string; glow: string },
+  pulse: number,
 ) {
-  ctx.save()
-  ctx.translate(player.x, player.y)
-  ctx.rotate((player.rotation * Math.PI) / 180)
+  const r = AVATAR_R
+  const glowIntensity = 0.6 + Math.sin(pulse * 2) * 0.3
 
   ctx.save()
+  ctx.translate(pl.x, pl.y)
+  ctx.rotate((pl.rotation * Math.PI) / 180)
+
+  ctx.shadowColor = neon.glow
+  ctx.shadowBlur = 20 * glowIntensity
+
   ctx.beginPath()
-  ctx.arc(0, 0, size / 2, 0, Math.PI * 2)
+  ctx.arc(0, 0, r + 2, 0, Math.PI * 2)
+  ctx.fillStyle = `${neon.hex}22`
+  ctx.fill()
+
+  ctx.shadowBlur = 8
+  ctx.beginPath()
+  ctx.arc(0, 0, r, 0, Math.PI * 2)
+  ctx.fillStyle = '#1a1a2e'
+  ctx.fill()
+
+  ctx.shadowBlur = 0
+  ctx.save()
+  ctx.beginPath()
+  ctx.arc(0, 0, r - 1, 0, Math.PI * 2)
   ctx.clip()
-  ctx.drawImage(image, -size / 2, -size / 2, size, size)
-  ctx.restore()
 
-  ctx.strokeStyle = 'rgba(255,255,255,0.6)'
-  ctx.lineWidth = 2
-  ctx.beginPath()
-  ctx.arc(0, 0, size / 2, 0, Math.PI * 2)
-  ctx.stroke()
-
-  ctx.restore()
-}
-
-function drawFlapParticles(
-  ctx: CanvasRenderingContext2D,
-  particles: { x: number; y: number; life: number }[],
-) {
-  for (const pt of particles) {
-    ctx.fillStyle = `rgba(255,255,255,${pt.life * 0.5})`
-    ctx.beginPath()
-    ctx.arc(pt.x - 20, pt.y, 4 * pt.life, 0, Math.PI * 2)
-    ctx.fill()
+  if (photoImage && skin.emoji === '😎') {
+    ctx.drawImage(photoImage, -r + 1, -r + 1, (r - 1) * 2, (r - 1) * 2)
   }
+
+  ctx.restore()
+
+  ctx.font = `${r * 1.1}px serif`
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'middle'
+  ctx.fillStyle = '#fff'
+  ctx.fillText(skin.emoji, 0, 1)
+
+  ctx.shadowBlur = 4
+  ctx.beginPath()
+  ctx.arc(0, 0, r, 0, Math.PI * 2)
+  ctx.strokeStyle = neon.hex
+  ctx.lineWidth = 2
+  ctx.globalAlpha = glowIntensity
+  ctx.stroke()
+  ctx.globalAlpha = 1
+  ctx.shadowBlur = 0
+
+  ctx.restore()
 }
 
-function drawScore(ctx: CanvasRenderingContext2D, w: number, score: number, screen: GameScreen) {
+function drawScore(ctx: CanvasRenderingContext2D, score: number, screen: Screen) {
   if (screen === 'MENU' || screen === 'GAME_OVER') return
 
-  ctx.font = 'bold 48px Arial, sans-serif'
+  ctx.font = 'bold 52px "Segoe UI", Arial, sans-serif'
   ctx.textAlign = 'center'
   ctx.textBaseline = 'top'
-  ctx.strokeStyle = '#000'
-  ctx.lineWidth = 4
-  ctx.strokeText(String(score), w / 2, 30)
-  ctx.fillStyle = '#fff'
-  ctx.fillText(String(score), w / 2, 30)
+
+  ctx.shadowColor = 'rgba(0, 240, 255, 0.5)'
+  ctx.shadowBlur = 16
+  ctx.fillStyle = '#ffffff'
+  ctx.fillText(String(score), W / 2, 20)
+
+  ctx.shadowBlur = 0
+  ctx.strokeStyle = 'rgba(0,0,0,0.3)'
+  ctx.lineWidth = 2
+  ctx.strokeText(String(score), W / 2, 20)
 }
 
-function drawMenuOverlay(ctx: CanvasRenderingContext2D, w: number, h: number, gh: number) {
+function drawMenu(ctx: CanvasRenderingContext2D) {
   ctx.textAlign = 'center'
 
-  ctx.font = 'bold 36px Arial, sans-serif'
+  ctx.shadowColor = 'rgba(0, 240, 255, 0.4)'
+  ctx.shadowBlur = 20
+  ctx.font = 'bold 34px "Segoe UI", Arial, sans-serif'
   ctx.textBaseline = 'bottom'
-  ctx.strokeStyle = '#000'
-  ctx.lineWidth = 4
-  ctx.strokeText('Flappy Avatar', w / 2, h / 2 - gh / 2 - 40)
   ctx.fillStyle = '#fff'
-  ctx.fillText('Flappy Avatar', w / 2, h / 2 - gh / 2 - 40)
+  ctx.fillText('Flappy Avatar', W / 2, H / 2 - GROUND_H / 2 - 50)
+  ctx.shadowBlur = 0
 
-  const blink = Math.sin(Date.now() / 400) > 0
+  ctx.font = '12px "Segoe UI", Arial, sans-serif'
+  ctx.textBaseline = 'top'
+  ctx.fillStyle = 'rgba(255,255,255,0.35)'
+  ctx.fillText('CUSTOMIZE YOUR AVATAR — THEN TAP TO FLY', W / 2, H / 2 - GROUND_H / 2 + 50)
+
+  const blink = Math.sin(Date.now() / 380) > 0
   if (blink) {
-    ctx.font = '18px Arial, sans-serif'
+    ctx.shadowColor = 'rgba(0, 240, 255, 0.6)'
+    ctx.shadowBlur = 12
+    ctx.font = 'bold 16px "Segoe UI", Arial, sans-serif'
     ctx.textBaseline = 'top'
-    ctx.strokeStyle = '#000'
-    ctx.lineWidth = 3
-    ctx.strokeText('Tap to Start', w / 2, h / 2 - gh / 2 + 40)
     ctx.fillStyle = '#fff'
-    ctx.fillText('Tap to Start', w / 2, h / 2 - gh / 2 + 40)
+    ctx.fillText('TAP TO START', W / 2, H / 2 - GROUND_H / 2 + 80)
+    ctx.shadowBlur = 0
   }
 }
 
-function drawGameOver(
-  ctx: CanvasRenderingContext2D,
-  w: number, h: number, gh: number,
-  score: number, best: number,
-) {
-  ctx.fillStyle = 'rgba(0,0,0,0.45)'
-  ctx.fillRect(0, 0, w, h - gh)
+function drawGameOver(ctx: CanvasRenderingContext2D, score: number, best: number) {
+  ctx.fillStyle = 'rgba(0, 0, 0, 0.55)'
+  ctx.fillRect(0, 0, W, H - GROUND_H)
 
   ctx.textAlign = 'center'
 
-  ctx.font = 'bold 40px Arial, sans-serif'
+  ctx.shadowColor = 'rgba(255, 0, 68, 0.4)'
+  ctx.shadowBlur = 24
+  ctx.font = 'bold 38px "Segoe UI", Arial, sans-serif'
   ctx.textBaseline = 'middle'
-  ctx.strokeStyle = '#000'
-  ctx.lineWidth = 4
-  ctx.strokeText('GAME OVER', w / 2, h / 2 - gh / 2 - 90)
-  ctx.fillStyle = '#fff'
-  ctx.fillText('GAME OVER', w / 2, h / 2 - gh / 2 - 90)
+  ctx.fillStyle = '#ff3355'
+  ctx.fillText('GAME OVER', W / 2, H / 2 - GROUND_H / 2 - 90)
+  ctx.shadowBlur = 0
 
-  const cx = w / 2
-  const cy = h / 2 - gh / 2 - 10
-  const cardW = 220
-  const cardH = 100
+  const cx = W / 2
+  const cy = H / 2 - GROUND_H / 2 - 5
+  const cw = 230, ch = 110
 
-  ctx.fillStyle = '#deb887'
-  ctx.strokeStyle = '#000'
-  ctx.lineWidth = 2
-  roundRect(ctx, cx - cardW / 2, cy - cardH / 2, cardW, cardH, 8)
+  ctx.shadowColor = 'rgba(0, 240, 255, 0.1)'
+  ctx.shadowBlur = 16
+  ctx.fillStyle = 'rgba(15, 12, 41, 0.85)'
+  roundRect(ctx, cx - cw / 2, cy - ch / 2, cw, ch, 12)
   ctx.fill()
+  ctx.strokeStyle = 'rgba(0, 240, 255, 0.15)'
+  ctx.lineWidth = 1
   ctx.stroke()
+  ctx.shadowBlur = 0
 
   ctx.textAlign = 'left'
   ctx.textBaseline = 'middle'
 
-  ctx.font = '14px Arial, sans-serif'
-  ctx.fillStyle = '#666'
-  ctx.fillText('SCORE', cx - 30, cy - 18)
-  ctx.fillText('BEST', cx - 30, cy + 18)
+  ctx.font = '12px "Segoe UI", Arial, sans-serif'
+  ctx.fillStyle = 'rgba(255,255,255,0.4)'
+  ctx.fillText('SCORE', cx - 35, cy - 18)
+  ctx.fillText('BEST', cx - 35, cy + 18)
 
   ctx.textAlign = 'right'
-  ctx.font = 'bold 20px Arial, sans-serif'
-  ctx.fillStyle = '#333'
-  ctx.fillText(String(score), cx + cardW / 2 - 15, cy - 18)
-  ctx.fillText(String(best), cx + cardW / 2 - 15, cy + 18)
+  ctx.font = 'bold 22px "Segoe UI", Arial, sans-serif'
+  ctx.fillStyle = '#fff'
+  ctx.fillText(String(score), cx + cw / 2 - 16, cy - 18)
+  ctx.fillText(String(best), cx + cw / 2 - 16, cy + 18)
 
   const medal = getMedal(score)
   if (medal) {
     ctx.save()
     ctx.beginPath()
-    ctx.arc(cx - cardW / 2 + 36, cy, 18, 0, Math.PI * 2)
+    ctx.arc(cx - cw / 2 + 35, cy, 17, 0, Math.PI * 2)
     ctx.fillStyle = medal.color
+    ctx.shadowColor = medal.color
+    ctx.shadowBlur = 12
     ctx.fill()
+    ctx.shadowBlur = 0
     ctx.strokeStyle = medal.border
-    ctx.lineWidth = 2
+    ctx.lineWidth = 1.5
     ctx.stroke()
-
-    ctx.font = '18px Arial, sans-serif'
+    ctx.font = '16px serif'
     ctx.textAlign = 'center'
     ctx.textBaseline = 'middle'
     ctx.fillStyle = '#fff'
-    ctx.fillText(medal.icon, cx - cardW / 2 + 36, cy + 1)
+    ctx.fillText(medal.icon, cx - cw / 2 + 35, cy + 1)
     ctx.restore()
   }
 
-  const blink = Math.sin(Date.now() / 400) > 0
+  const blink = Math.sin(Date.now() / 380) > 0
   if (blink) {
     ctx.textAlign = 'center'
     ctx.textBaseline = 'top'
-    ctx.font = '16px Arial, sans-serif'
-    ctx.strokeStyle = '#000'
-    ctx.lineWidth = 3
-    ctx.strokeText('Tap to Restart', w / 2, h / 2 - gh / 2 + 60)
+    ctx.font = 'bold 15px "Segoe UI", Arial, sans-serif'
+    ctx.shadowColor = 'rgba(0, 240, 255, 0.5)'
+    ctx.shadowBlur = 10
     ctx.fillStyle = '#fff'
-    ctx.fillText('Tap to Restart', w / 2, h / 2 - gh / 2 + 60)
+    ctx.fillText('TAP TO RESTART', W / 2, H / 2 - GROUND_H / 2 + 65)
+    ctx.shadowBlur = 0
   }
 }
 
@@ -476,13 +498,9 @@ function getMedal(score: number): { color: string; border: string; icon: string 
   return null
 }
 
-function roundRect(
-  ctx: CanvasRenderingContext2D,
-  x: number, y: number, w: number, h: number, r: number,
-) {
+function roundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number) {
   ctx.beginPath()
-  ctx.moveTo(x + r, y)
-  ctx.lineTo(x + w - r, y)
+  ctx.moveTo(x + r, y); ctx.lineTo(x + w - r, y)
   ctx.quadraticCurveTo(x + w, y, x + w, y + r)
   ctx.lineTo(x + w, y + h - r)
   ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h)
@@ -493,41 +511,32 @@ function roundRect(
   ctx.closePath()
 }
 
-// ===== COLLISION =====
-
-function checkCollision(player: PlayerPhysics, pipe: Pipe, groundY: number): boolean {
-  const r = player.width / 2
-  const cx = player.x, cy = player.y
-
+function hit(pl: PlayerPhysics, pipe: Pipe, groundY: number): boolean {
+  const r = pl.width / 2
+  const cx = pl.x, cy = pl.y
   const rects = [
     { l: pipe.x, r: pipe.x + pipe.width, t: 0, b: pipe.gapStart },
     { l: pipe.x, r: pipe.x + pipe.width, t: pipe.gapEnd, b: groundY },
   ]
   for (const rect of rects) {
-    const closestX = Math.max(rect.l, Math.min(cx, rect.r))
-    const closestY = Math.max(rect.t, Math.min(cy, rect.b))
-    const dx = cx - closestX, dy = cy - closestY
+    const cx2 = Math.max(rect.l, Math.min(cx, rect.r))
+    const cy2 = Math.max(rect.t, Math.min(cy, rect.b))
+    const dx = cx - cx2, dy = cy - cy2
     if (dx * dx + dy * dy < r * r) return true
   }
   return false
 }
 
-// ===== EVENTS =====
-
-function setupEvents(canvas: HTMLCanvasElement, flap: () => void): (() => void)[] {
-  const onKey = (e: KeyboardEvent) => {
-    if (e.code === 'Space') { e.preventDefault(); flap() }
-  }
-  const onClick = () => flap()
-  const onTouch = (e: TouchEvent) => { e.preventDefault(); flap() }
-
-  window.addEventListener('keydown', onKey)
-  canvas.addEventListener('click', onClick)
-  canvas.addEventListener('touchstart', onTouch, { passive: false })
-
+function bindEvents(canvas: HTMLCanvasElement, input: () => void): (() => void)[] {
+  const kd = (e: KeyboardEvent) => { if (e.code === 'Space') { e.preventDefault(); input() } }
+  const cl = () => input()
+  const tc = (e: TouchEvent) => { e.preventDefault(); input() }
+  window.addEventListener('keydown', kd)
+  canvas.addEventListener('click', cl)
+  canvas.addEventListener('touchstart', tc, { passive: false })
   return [
-    () => window.removeEventListener('keydown', onKey),
-    () => canvas.removeEventListener('click', onClick),
-    () => canvas.removeEventListener('touchstart', onTouch),
+    () => window.removeEventListener('keydown', kd),
+    () => canvas.removeEventListener('click', cl),
+    () => canvas.removeEventListener('touchstart', tc),
   ]
 }

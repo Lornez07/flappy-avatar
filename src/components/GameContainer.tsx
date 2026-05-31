@@ -1,27 +1,32 @@
-import React, { useState, useRef, useCallback } from 'react'
-import { AvatarUploader } from './AvatarUploader'
+import React, { useState, useCallback, useRef } from 'react'
+import { AvatarPicker } from './AvatarPicker'
 import { CropModal } from './CropModal'
 import { GameCanvas } from './GameCanvas'
 import { Leaderboard } from './Leaderboard'
+import { AvatarConfig } from '../types'
 import {
   uploadAvatarToStorage,
   submitScore,
   fetchPlayerBest,
 } from '../lib/supabaseClient'
 
+const DEFAULT_AVATAR: AvatarConfig = {
+  type: 'skin', skinId: 'cool', photoData: null, neonColorId: 'cyan',
+}
+
 export const GameContainer: React.FC = () => {
-  const [playerImage, setPlayerImage] = useState<HTMLImageElement | null>(null)
+  const [avatarConfig, setAvatarConfig] = useState<AvatarConfig>(() => {
+    const saved = localStorage.getItem('flappyAvatar_config')
+    return saved ? JSON.parse(saved) : DEFAULT_AVATAR
+  })
+  const [photoImage, setPhotoImage] = useState<HTMLImageElement | null>(null)
   const [showCrop, setShowCrop] = useState(false)
   const [score, setScore] = useState(0)
   const [highScore, setHighScore] = useState(() => {
-    const saved = localStorage.getItem('flappyAvatar_best')
-    return saved ? parseInt(saved) : 0
+    const s = localStorage.getItem('flappyAvatar_best')
+    return s ? parseInt(s) : 0
   })
-  const [phase, setPhase] = useState<'UPLOAD' | 'GAME'>(
-    localStorage.getItem('flappyAvatar_hasAvatar') ? 'GAME' : 'UPLOAD',
-  )
-
-  const [leaderboardOpen, setLeaderboardOpen] = useState(false)
+  const [showLeaderboard, setShowLeaderboard] = useState(false)
   const [playerName, setPlayerName] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [submitError, setSubmitError] = useState<string | null>(null)
@@ -29,25 +34,25 @@ export const GameContainer: React.FC = () => {
 
   const originalImageRef = useRef<HTMLImageElement | null>(null)
 
+  const handleConfigChange = useCallback((cfg: AvatarConfig) => {
+    setAvatarConfig(cfg)
+    localStorage.setItem('flappyAvatar_config', JSON.stringify(cfg))
+  }, [])
+
   const handleImageSelected = useCallback((img: HTMLImageElement) => {
     originalImageRef.current = img
     setShowCrop(true)
   }, [])
 
   const handleCropConfirm = useCallback((cropped: HTMLImageElement) => {
-    setPlayerImage(cropped)
+    setPhotoImage(cropped)
     setShowCrop(false)
-    setPhase('GAME')
-    localStorage.setItem('flappyAvatar_hasAvatar', '1')
-  }, [])
+    handleConfigChange({ ...avatarConfig, type: 'photo', photoData: cropped.src })
+  }, [avatarConfig, handleConfigChange])
 
-  const handleCropCancel = useCallback(() => {
-    setShowCrop(false)
-  }, [])
+  const handleCropCancel = useCallback(() => setShowCrop(false), [])
 
-  const handleScore = useCallback((s: number) => {
-    setScore(s)
-  }, [])
+  const handleScore = useCallback((s: number) => setScore(s), [])
 
   const handleGameOver = useCallback((finalScore: number) => {
     setScore(finalScore)
@@ -64,17 +69,13 @@ export const GameContainer: React.FC = () => {
   }, [])
 
   const handleSubmitScore = useCallback(async () => {
-    if (!playerName.trim()) {
-      setSubmitError('Enter your name')
-      return
-    }
+    if (!playerName.trim()) { setSubmitError('Enter your name'); return }
     setSubmitting(true)
     setSubmitError(null)
     try {
-      let avatarUrl: string | undefined
-      if (playerImage?.src) {
-        avatarUrl = await uploadAvatarToStorage(playerImage.src, playerName.trim()) ?? undefined
-      }
+      const avatarUrl = photoImage?.src
+        ? await uploadAvatarToStorage(photoImage.src, playerName.trim()) ?? undefined
+        : undefined
       const result = await submitScore(playerName.trim(), score, avatarUrl)
       if (!result.success) {
         setSubmitError(result.error || 'Failed to submit')
@@ -83,88 +84,110 @@ export const GameContainer: React.FC = () => {
       }
       await fetchPlayerBest(playerName.trim())
       setSubmitting(false)
-      setLeaderboardOpen(true)
+      setShowLeaderboard(true)
     } catch {
       setSubmitError('Failed to submit score')
       setSubmitting(false)
     }
-  }, [playerName, score, playerImage])
+  }, [playerName, score, photoImage])
 
-  if (phase === 'UPLOAD' && !showCrop) {
-    return (
-      <div className="min-h-screen bg-gradient-to-b from-sky-300 to-sky-500 flex items-center justify-center p-4">
-        <div className="bg-white/90 backdrop-blur rounded-3xl p-8 max-w-sm w-full shadow-2xl text-center">
-          <h1 className="text-3xl font-bold text-sky-800 mb-2">Flappy Avatar</h1>
-          <p className="text-gray-500 text-sm mb-6">Upload your photo to play</p>
-          <AvatarUploader onImageSelected={handleImageSelected} />
-        </div>
-      </div>
-    )
-  }
+  const showPhoto = avatarConfig.type === 'photo' && photoImage
 
   return (
-    <div className="min-h-screen flex flex-col items-center bg-gradient-to-b from-sky-200 to-sky-400 p-2 sm:p-4">
-      <div className="w-full max-w-[400px]">
-        {phase === 'GAME' && playerImage && (
-          <GameCanvas
-            playerImage={playerImage}
-            onScore={handleScore}
-            onGameOver={handleGameOver}
-            onRestart={handleRestart}
-            highScore={highScore}
-          />
-        )}
+    <div
+      className="min-h-screen flex flex-col items-center justify-center p-4 select-none"
+      style={{
+        background: 'radial-gradient(ellipse at 50% 30%, #0f0c29, #1a1a4e, #0a0a1a)',
+        WebkitUserSelect: 'none', userSelect: 'none',
+      }}
+    >
+      <div className="w-full max-w-[400px] space-y-3">
 
-        {showSubmit && (
-          <div className="bg-white/90 backdrop-blur rounded-2xl p-4 mt-3 shadow-lg space-y-2">
-            <input
-              type="text"
-              placeholder="Enter your name"
-              maxLength={50}
-              value={playerName}
-              onChange={e => setPlayerName(e.target.value)}
-              className="w-full px-3 py-2 rounded-lg border border-gray-300 text-sm"
-            />
-            {submitError && (
-              <p className="text-red-500 text-xs">{submitError}</p>
-            )}
-            <div className="flex gap-2">
+        <GameCanvas
+          avatarConfig={avatarConfig}
+          photoImage={showPhoto ? photoImage : null}
+          onScore={handleScore}
+          onGameOver={handleGameOver}
+          onRestart={handleRestart}
+          highScore={highScore}
+        />
+
+        <div className="bg-white/5 backdrop-blur-xl rounded-2xl p-4 border border-white/10 shadow-2xl space-y-3">
+          <AvatarPicker
+            config={avatarConfig}
+            onChange={handleConfigChange}
+            onUploadClick={() => document.getElementById('avatar-upload-input')?.click()}
+          />
+
+          <input
+            id="avatar-upload-input"
+            type="file"
+            accept="image/*"
+            className="hidden"
+            onChange={e => {
+              const file = e.target.files?.[0]
+              if (!file) return
+              const reader = new FileReader()
+              reader.onload = ev => {
+                const img = new Image()
+                img.onload = () => handleImageSelected(img)
+                img.src = ev.target?.result as string
+              }
+              reader.readAsDataURL(file)
+            }}
+          />
+
+          {showSubmit && (
+            <div className="pt-3 border-t border-white/10 space-y-2">
+              <input
+                type="text"
+                placeholder="Enter your name for the leaderboard"
+                maxLength={50}
+                value={playerName}
+                onChange={e => setPlayerName(e.target.value)}
+                className="w-full px-3 py-2.5 rounded-xl bg-black/30 border border-white/10 text-white text-sm placeholder-white/30 focus:outline-none focus:border-cyan-400/50 transition"
+              />
+              {submitError && (
+                <p className="text-red-400 text-xs">{submitError}</p>
+              )}
+              <div className="flex gap-2">
+                <button
+                  onClick={handleSubmitScore}
+                  disabled={submitting}
+                  className="flex-1 bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 disabled:opacity-40 text-white font-bold py-2.5 rounded-xl text-sm transition-all duration-200 shadow-lg shadow-cyan-500/20"
+                >
+                  {submitting ? 'Submitting...' : 'Submit Score'}
+                </button>
+                <button
+                  onClick={() => setShowLeaderboard(!showLeaderboard)}
+                  className="px-4 bg-white/10 hover:bg-white/20 text-white rounded-xl text-sm font-bold transition-all duration-200"
+                >
+                  🏆
+                </button>
+              </div>
+            </div>
+          )}
+
+          {!showSubmit && (
+            <div className="pt-2 text-center">
               <button
-                onClick={handleSubmitScore}
-                disabled={submitting}
-                className="flex-1 bg-sky-500 hover:bg-sky-600 disabled:bg-gray-300 text-white font-bold py-2 rounded-lg text-sm transition"
+                onClick={() => setShowLeaderboard(!showLeaderboard)}
+                className="text-white/30 hover:text-white/60 text-xs font-semibold tracking-wider uppercase transition"
               >
-                {submitting ? 'Submitting...' : '📊 Submit Score'}
-              </button>
-              <button
-                onClick={() => setLeaderboardOpen(!leaderboardOpen)}
-                className="px-3 bg-amber-500 hover:bg-amber-600 text-white font-bold py-2 rounded-lg text-sm transition"
-              >
-                🏆
+                {showLeaderboard ? 'Hide Leaderboard' : 'View Leaderboard'}
               </button>
             </div>
-          </div>
-        )}
+          )}
 
-        {leaderboardOpen && (
-          <div className="bg-white/90 backdrop-blur rounded-2xl p-4 mt-3 shadow-lg">
-            <Leaderboard
-              playerName={showSubmit ? playerName : undefined}
-              limit={10}
-            />
-          </div>
-        )}
-
-        {!showSubmit && !leaderboardOpen && (
-          <div className="text-center mt-3">
-            <button
-              onClick={() => setLeaderboardOpen(true)}
-              className="text-white/80 hover:text-white text-sm font-bold transition"
-            >
-              🏆 View Leaderboard
-            </button>
-          </div>
-        )}
+          {showLeaderboard && (
+            <div className="pt-3 border-t border-white/10">
+              <Leaderboard
+                playerName={showSubmit ? playerName : undefined}
+                limit={10}
+              />
+            </div>
+          )}
+        </div>
       </div>
 
       {showCrop && originalImageRef.current && (
