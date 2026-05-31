@@ -1,0 +1,15 @@
+[
+  {
+    "vscodeRequestId": "request_bcb6cbd2-d327-44b1-bd17-af01a02f1e29",
+    "copilotRequestId": "184adaa9-d8c6-4f2d-8305-9c7b5983ac2d",
+    "toolIdEditMap": {},
+    "responseModelId": "claude-haiku-4.5"
+  },
+  {
+    "vscodeRequestId": "request_8750086a-21d0-4ecf-8833-a19393e246c9",
+    "agentId": "",
+    "toolIdEditMap": {},
+    "copilotRequestId": "650591c9-a961-4206-9935-f0123f27fcca",
+    "responseModelId": "claude-haiku-4.5"
+  }
+]
