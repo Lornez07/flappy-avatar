@@ -10,4 +10,4 @@ createRoot(document.getElementById('root')!).render(
 )
 
 const splash = document.getElementById('splash')
-if (splash) requestAnimationFrame(() => splash.classList.add('hide'))
+if (splash) setTimeout(() => splash.classList.add('hide'), 2500)
