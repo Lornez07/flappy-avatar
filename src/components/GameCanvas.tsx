@@ -1,446 +1,533 @@
-/**
- * GameCanvas Component
- *
- * High-DPI canvas rendering with advanced physics:
- * - Rotational avatar that tilts on flap and falls naturally
- * - Gravity-based physics with smooth interpolation
- * - State-driven rendering loop
- * - Responsive to Retina/4K displays
- *
- * Physics:
- * - Player rotation: -20° on flap, smoothly interpolates to +70° during freefall
- * - Velocity capped to prevent excessive falling speed
- * - Collision detection for pipes and boundaries
- */
-
-import React, { useEffect, useRef, useState, useCallback } from 'react';
-import {
-  PlayerPhysics,
-  PhysicsConfig,
-  Pipe,
-  PipeConfig,
-  CanvasContext,
-} from '../types';
+import React, { useEffect, useRef } from 'react'
+import { PlayerPhysics, PhysicsConfig, Pipe, PipeConfig } from '../types'
 
 interface GameCanvasProps {
-  playerImage: HTMLImageElement | null;
-  isRunning: boolean;
-  onScore: (newScore: number) => void;
-  onGameOver: (finalScore: number) => void;
-  onFlap: () => void;
+  playerImage: HTMLImageElement | null
+  onScore: (score: number) => void
+  onGameOver: (score: number) => void
+  onRestart: () => void
+  highScore: number
 }
 
-const PHYSICS_CONFIG: PhysicsConfig = {
+const PHYSICS: PhysicsConfig = {
   gravity: 0.6,
   flapStrength: -12,
   maxVelocity: 15,
   rotationFlap: -20,
   rotationMax: 70,
   rotationLerpSpeed: 0.08,
-};
+}
 
-const PIPE_CONFIG: PipeConfig = {
-  width: 60,
-  gap: 150,
-  spacing: 200,
-  minGapY: 50,
+const PIPE_CFG: PipeConfig = {
+  width: 52,
+  gap: 148,
+  spacing: 196,
+  minGapY: 60,
   speed: 5,
-};
+}
 
-const CANVAS_WIDTH = 400;
-const CANVAS_HEIGHT = 600;
-const AVATAR_SIZE = 40;
+const CANVAS_W = 400
+const CANVAS_H = 600
+const AVATAR_SIZE = 36
+const GROUND_H = 100
+const PLAYER_X = 80
+
+type GameScreen = 'MENU' | 'PLAYING' | 'GAME_OVER'
 
 export const GameCanvas: React.FC<GameCanvasProps> = ({
   playerImage,
-  isRunning,
   onScore,
   onGameOver,
-  onFlap,
+  onRestart,
+  highScore,
 }) => {
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const containerRef = useRef<HTMLDivElement>(null);
-  const [gameRunning, setGameRunning] = useState(false);
+  const canvasRef = useRef<HTMLCanvasElement>(null)
 
-  // Game state refs (persistent across renders)
+  const screenRef = useRef<GameScreen>('MENU')
   const playerRef = useRef<PlayerPhysics>({
-    x: 60,
-    y: CANVAS_HEIGHT / 2,
-    width: AVATAR_SIZE,
-    height: AVATAR_SIZE,
-    velocityY: 0,
-    rotation: 0,
-    rotationVelocity: 0,
-    hasFlapped: false,
-  });
-
-  const pipeRef = useRef<Pipe[]>([]);
-  const scoreRef = useRef(0);
-  const pipeCounterRef = useRef(0);
-  const gameStateRef = useRef({
-    isGameOver: false,
-    lastFrameTime: 0,
-  });
-
-  // Canvas context with high-DPI support
-  const canvasContextRef = useRef<CanvasContext | null>(null);
-
-  /**
-   * Initialize high-DPI canvas with responsive sizing
-   */
-  const initializeCanvas = useCallback(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-
-    const dpr = window.devicePixelRatio || 1;
-
-    // Internal resolution stays fixed for consistent physics
-    canvas.width = CANVAS_WIDTH * dpr;
-    canvas.height = CANVAS_HEIGHT * dpr;
-
-    // Scale context to match DPI
-    ctx.scale(dpr, dpr);
-
-    // Enable image smoothing for better quality
-    ctx.imageSmoothingEnabled = true;
-    ctx.imageSmoothingQuality = 'high';
-
-    canvasContextRef.current = {
-      width: CANVAS_WIDTH,
-      height: CANVAS_HEIGHT,
-      dpr,
-      canvas,
-      ctx,
-    };
-  }, []);
-
-  /**
-   * Player flap: set rotation and upward velocity
-   */
-  const flap = useCallback(() => {
-    if (gameStateRef.current.isGameOver || !gameRunning) return;
-
-    playerRef.current.velocityY = PHYSICS_CONFIG.flapStrength;
-    playerRef.current.rotation = PHYSICS_CONFIG.rotationFlap;
-    playerRef.current.rotationVelocity = 0;
-    playerRef.current.hasFlapped = true;
-
-    onFlap?.();
-  }, [gameRunning, onFlap]);
-
-  /**
-   * Update physics: gravity, rotation, collision
-   */
-  const update = useCallback(() => {
-    const player = playerRef.current;
-    const ctx = canvasContextRef.current;
-
-    if (!ctx || gameStateRef.current.isGameOver) return;
-
-    // Apply gravity
-    player.velocityY = Math.min(
-      player.velocityY + PHYSICS_CONFIG.gravity,
-      PHYSICS_CONFIG.maxVelocity
-    );
-
-    // Update position
-    player.y += player.velocityY;
-
-    // Boundary collision
-    if (
-      player.y + player.height / 2 > ctx.height ||
-      player.y - player.height / 2 < 0
-    ) {
-      gameStateRef.current.isGameOver = true;
-      setGameRunning(false);
-      onGameOver(scoreRef.current);
-      return;
-    }
-
-    // Update rotation: smooth lerp towards angle based on velocity
-    const targetRotation =
-      player.velocityY > 0
-        ? PHYSICS_CONFIG.rotationMax
-        : PHYSICS_CONFIG.rotationFlap;
-
-    player.rotation = lerp(
-      player.rotation,
-      targetRotation,
-      PHYSICS_CONFIG.rotationLerpSpeed
-    );
-
-    // Pipe generation
-    pipeCounterRef.current++;
-    if (pipeCounterRef.current > PIPE_CONFIG.spacing) {
-      const gapStart = Math.random() * (ctx.height - PIPE_CONFIG.gap - 100) + PIPE_CONFIG.minGapY;
-      pipeRef.current.push({
-        x: ctx.width,
-        gapStart,
-        gapEnd: gapStart + PIPE_CONFIG.gap,
-        scored: false,
-        width: PIPE_CONFIG.width,
-      });
-      pipeCounterRef.current = 0;
-    }
-
-    // Update pipes and check collisions
-    for (let i = pipeRef.current.length - 1; i >= 0; i--) {
-      const pipe = pipeRef.current[i];
-      pipe.x -= PIPE_CONFIG.speed;
-
-      // Scoring
-      if (
-        !pipe.scored &&
-        pipe.x + pipe.width < player.x - player.width / 2
-      ) {
-        scoreRef.current++;
-        pipe.scored = true;
-        onScore(scoreRef.current);
-      }
-
-      // Collision detection (circle-based)
-      if (checkCircleRectCollision(player, pipe, ctx.height)) {
-        gameStateRef.current.isGameOver = true;
-        setGameRunning(false);
-        onGameOver(scoreRef.current);
-        return;
-      }
-
-      // Remove off-screen pipes
-      if (pipe.x + pipe.width < 0) {
-        pipeRef.current.splice(i, 1);
-      }
-    }
-  }, [gameRunning, onScore, onGameOver]);
-
-  /**
-   * Draw frame: background, pipes, player
-   */
-  const draw = useCallback(() => {
-    const canvasCtx = canvasContextRef.current;
-    if (!canvasCtx) return;
-
-    const { ctx, width, height } = canvasCtx;
-
-    // Draw sky gradient background
-    const gradient = ctx.createLinearGradient(0, 0, 0, height);
-    gradient.addColorStop(0, '#87ceeb');
-    gradient.addColorStop(1, '#e0f6ff');
-    ctx.fillStyle = gradient;
-    ctx.fillRect(0, 0, width, height);
-
-    // Draw pipes
-    ctx.fillStyle = '#2ecc71';
-    for (const pipe of pipeRef.current) {
-      ctx.fillRect(pipe.x, 0, pipe.width, pipe.gapStart);
-      ctx.fillRect(
-        pipe.x,
-        pipe.gapEnd,
-        pipe.width,
-        height - pipe.gapEnd
-      );
-
-      // Pipe cap (darker green)
-      ctx.fillStyle = '#27ae60';
-      ctx.fillRect(pipe.x - 5, pipe.gapStart - 10, pipe.width + 10, 10);
-      ctx.fillRect(pipe.x - 5, pipe.gapEnd, pipe.width + 10, 10);
-      ctx.fillStyle = '#2ecc71';
-    }
-
-    // Draw player with rotation
-    if (playerImage) {
-      drawRotatedCircle(
-        ctx,
-        playerImage,
-        playerRef.current,
-        AVATAR_SIZE
-      );
-    }
-  }, [playerImage]);
-
-  /**
-   * Game loop
-   */
-  useEffect(() => {
-    if (!isRunning) {
-      setGameRunning(false);
-      return;
-    }
-
-    setGameRunning(true);
-    gameStateRef.current.isGameOver = false;
-  }, [isRunning]);
+    x: PLAYER_X, y: CANVAS_H / 2 - GROUND_H / 2,
+    width: AVATAR_SIZE, height: AVATAR_SIZE,
+    velocityY: 0, rotation: 0, rotationVelocity: 0, hasFlapped: false,
+  })
+  const pipesRef = useRef<Pipe[]>([])
+  const scoreRef = useRef(0)
+  const bestRef = useRef(highScore)
+  const pipeTimerRef = useRef(0)
+  const groundOffsetRef = useRef(0)
+  const menuBobRef = useRef(0)
+  const flapParticlesRef = useRef<{ x: number; y: number; life: number }[]>([])
 
   useEffect(() => {
-    if (!gameRunning) return;
+    bestRef.current = highScore
+  }, [highScore])
 
-    const gameLoop = () => {
-      update();
-      draw();
-
-      if (gameRunning && !gameStateRef.current.isGameOver) {
-        requestAnimationFrame(gameLoop);
-      }
-    };
-
-    const rafId = requestAnimationFrame(gameLoop);
-    return () => cancelAnimationFrame(rafId);
-  }, [gameRunning, update, draw]);
-
-  /**
-   * Keyboard, click & touch controls
-   */
   useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.code === 'Space') {
-        e.preventDefault();
-        flap();
+    const canvas = canvasRef.current
+    if (!canvas) return
+    const ctx = canvas.getContext('2d')
+    if (!ctx) return
+
+    const dpr = window.devicePixelRatio || 1
+    canvas.width = CANVAS_W * dpr
+    canvas.height = CANVAS_H * dpr
+    ctx.scale(dpr, dpr)
+    ctx.imageSmoothingEnabled = true
+    ctx.imageSmoothingQuality = 'high'
+
+    const W = CANVAS_W, H = CANVAS_H
+
+    function resetGame() {
+      const p = playerRef.current
+      p.x = PLAYER_X
+      p.y = H / 2 - GROUND_H / 2
+      p.velocityY = 0
+      p.rotation = 0
+      p.rotationVelocity = 0
+      p.hasFlapped = false
+      pipesRef.current = []
+      scoreRef.current = 0
+      pipeTimerRef.current = 0
+      flapParticlesRef.current = []
+      screenRef.current = 'MENU'
+    }
+
+    function flap() {
+      const screen = screenRef.current
+      if (screen === 'MENU') {
+        screenRef.current = 'PLAYING'
+        const p = playerRef.current
+        p.velocityY = PHYSICS.flapStrength
+        p.rotation = PHYSICS.rotationFlap
+        p.rotationVelocity = 0
+        p.hasFlapped = true
+        return
       }
-    };
+      if (screen === 'GAME_OVER') {
+        resetGame()
+        onRestart()
+        return
+      }
+      if (screen === 'PLAYING') {
+        const p = playerRef.current
+        if (p.y + p.height / 2 > H - GROUND_H) return
+        p.velocityY = PHYSICS.flapStrength
+        p.rotation = PHYSICS.rotationFlap
+        p.rotationVelocity = 0
+        p.hasFlapped = true
+        flapParticlesRef.current.push({ x: p.x, y: p.y, life: 1 })
+      }
+    }
 
-    const handleClick = () => {
-      flap();
-    };
+    function update() {
+      const screen = screenRef.current
+      const p = playerRef.current
 
-    const handleTouch = (e: TouchEvent) => {
-      e.preventDefault();
-      flap();
-    };
+      groundOffsetRef.current = (groundOffsetRef.current + PIPE_CFG.speed) % 24
 
-    window.addEventListener('keydown', handleKeyDown);
-    const canvas = canvasRef.current;
-    canvas?.addEventListener('click', handleClick);
-    canvas?.addEventListener('touchstart', handleTouch, { passive: false });
+      if (screen === 'MENU') {
+        menuBobRef.current += 0.04
+        p.y = (H / 2 - GROUND_H / 2) + Math.sin(menuBobRef.current) * 8
+        return
+      }
+
+      if (screen === 'GAME_OVER') return
+
+      p.velocityY = Math.min(p.velocityY + PHYSICS.gravity, PHYSICS.maxVelocity)
+      p.y += p.velocityY
+
+      const targetRot = p.velocityY > 0 ? PHYSICS.rotationMax : PHYSICS.rotationFlap
+      p.rotation += (targetRot - p.rotation) * PHYSICS.rotationLerpSpeed
+
+      if (p.y + p.height / 2 > H - GROUND_H || p.y - p.height / 2 < 0) {
+        screenRef.current = 'GAME_OVER'
+        const finalScore = scoreRef.current
+        bestRef.current = Math.max(bestRef.current, finalScore)
+        onGameOver(finalScore)
+        return
+      }
+
+      pipeTimerRef.current++
+      if (pipeTimerRef.current > PIPE_CFG.spacing) {
+        const minY = PIPE_CFG.minGapY
+        const maxY = H - GROUND_H - PIPE_CFG.gap - PIPE_CFG.minGapY
+        const gapStart = minY + Math.random() * (maxY - minY)
+        pipesRef.current.push({
+          x: W, gapStart, gapEnd: gapStart + PIPE_CFG.gap,
+          scored: false, width: PIPE_CFG.width,
+        })
+        pipeTimerRef.current = 0
+      }
+
+      for (let i = pipesRef.current.length - 1; i >= 0; i--) {
+        const pipe = pipesRef.current[i]
+        pipe.x -= PIPE_CFG.speed
+
+        if (!pipe.scored && pipe.x + pipe.width < p.x - p.width / 2) {
+          scoreRef.current++
+          pipe.scored = true
+          onScore(scoreRef.current)
+        }
+
+        if (checkCollision(p, pipe, H - GROUND_H)) {
+          screenRef.current = 'GAME_OVER'
+          const finalScore = scoreRef.current
+          bestRef.current = Math.max(bestRef.current, finalScore)
+          onGameOver(finalScore)
+          return
+        }
+
+        if (pipe.x + pipe.width < 0) pipesRef.current.splice(i, 1)
+      }
+
+      flapParticlesRef.current = flapParticlesRef.current
+        .map(pt => ({ ...pt, life: pt.life - 0.04 }))
+        .filter(pt => pt.life > 0)
+    }
+
+    function draw() {
+      const screen = screenRef.current
+      const p = playerRef.current
+
+      ctx.clearRect(0, 0, W, H)
+
+      drawSky(ctx, W, H)
+      drawClouds(ctx, W, groundOffsetRef.current)
+      drawPipes(ctx, pipesRef.current)
+      drawGround(ctx, W, H, GROUND_H, groundOffsetRef.current)
+
+      if (playerImage) {
+        drawAvatar(ctx, playerImage, p, AVATAR_SIZE)
+      }
+
+      drawFlapParticles(ctx, flapParticlesRef.current)
+
+      drawScore(ctx, W, scoreRef.current, screen)
+
+      if (screen === 'MENU') {
+        drawMenuOverlay(ctx, W, H, GROUND_H)
+      }
+
+      if (screen === 'GAME_OVER') {
+        drawGameOver(ctx, W, H, GROUND_H, scoreRef.current, bestRef.current)
+      }
+    }
+
+    function loop() {
+      update()
+      draw()
+      requestAnimationFrame(loop)
+    }
+
+    const events = setupEvents(canvas, flap)
+    loop()
 
     return () => {
-      window.removeEventListener('keydown', handleKeyDown);
-      canvas?.removeEventListener('click', handleClick);
-      canvas?.removeEventListener('touchstart', handleTouch);
-    };
-  }, [flap]);
-
-  /**
-   * Initialize canvas on mount
-   */
-  useEffect(() => {
-    initializeCanvas();
-    draw();
-  }, []);
+      events.forEach(fn => fn())
+    }
+  }, [playerImage, onScore, onGameOver, onRestart])
 
   return (
-    <div ref={containerRef} className="w-full max-w-[400px] mx-auto">
+    <div className="w-full max-w-[400px] mx-auto">
       <canvas
         ref={canvasRef}
-        className="w-full aspect-[2/3] border-4 border-white rounded-lg shadow-xl cursor-pointer touch-none"
-        style={{ background: 'linear-gradient(to bottom, #87ceeb 0%, #e0f6ff 100%)' }}
+        className="w-full aspect-[2/3] shadow-xl cursor-pointer touch-none"
       />
     </div>
-  );
-};
-
-// ============================================================================
-// HELPER FUNCTIONS
-// ============================================================================
-
-/**
- * Linear interpolation between two values
- */
-function lerp(a: number, b: number, t: number): number {
-  return a + (b - a) * t;
+  )
 }
 
-/**
- * Draw player circle with rotation
- */
-function drawRotatedCircle(
+// ===== DRAWING HELPERS =====
+
+function drawSky(ctx: CanvasRenderingContext2D, w: number, h: number) {
+  const g = ctx.createLinearGradient(0, 0, 0, h)
+  g.addColorStop(0, '#4dc9f6')
+  g.addColorStop(1, '#aee4f7')
+  ctx.fillStyle = g
+  ctx.fillRect(0, 0, w, h)
+}
+
+function drawClouds(ctx: CanvasRenderingContext2D, w: number, offset: number) {
+  ctx.fillStyle = 'rgba(255,255,255,0.4)'
+  const clouds = [
+    { x: 40, y: 60, r1: 20, r2: 16 },
+    { x: 90, y: 55, r1: 24, r2: 18 },
+    { x: 300, y: 80, r1: 18, r2: 14 },
+    { x: 350, y: 75, r1: 22, r2: 16 },
+    { x: 180, y: 110, r1: 15, r2: 12 },
+  ]
+  const speed = 0.3
+  for (const c of clouds) {
+    const cx = ((c.x + offset * speed) % (w + 100)) - 50
+    ctx.beginPath()
+    ctx.ellipse(cx, c.y, c.r1, c.r2, 0, 0, Math.PI * 2)
+    ctx.fill()
+  }
+}
+
+function drawGround(ctx: CanvasRenderingContext2D, w: number, h: number, gh: number, offset: number) {
+  const gy = h - gh
+
+  ctx.fillStyle = '#ded895'
+  ctx.fillRect(0, gy, w, gh)
+
+  ctx.fillStyle = '#5a4a32'
+  ctx.fillRect(0, gy + 8, w, gh - 8)
+
+  ctx.fillStyle = '#7ec850'
+  ctx.fillRect(0, gy, w, 8)
+
+  ctx.strokeStyle = '#6ab040'
+  ctx.lineWidth = 1
+  for (let x = -offset; x < w + 24; x += 24) {
+    ctx.beginPath()
+    ctx.moveTo(x, gy)
+    ctx.lineTo(x + 12, gy - 4)
+    ctx.lineTo(x + 24, gy)
+    ctx.stroke()
+  }
+
+  ctx.fillStyle = '#5a4a32'
+  ctx.strokeStyle = '#4a3a22'
+  ctx.lineWidth = 1
+  for (let x = -offset; x < w + 24; x += 24) {
+    ctx.fillRect(x, gy + 8, 24, 3)
+    ctx.strokeRect(x, gy + 8, 24, 3)
+  }
+}
+
+function drawPipes(ctx: CanvasRenderingContext2D, pipes: Pipe[]) {
+  for (const pipe of pipes) {
+    const capOverhang = 8
+    const capH = 22
+
+    ctx.fillStyle = '#73bf2e'
+    ctx.fillRect(pipe.x, 0, pipe.width, pipe.gapStart)
+    ctx.fillRect(pipe.x, pipe.gapEnd, pipe.width, CANVAS_H - pipe.gapEnd)
+
+    ctx.fillStyle = '#558b2f'
+    ctx.fillRect(pipe.x - capOverhang, pipe.gapStart - capH, pipe.width + capOverhang * 2, capH)
+    ctx.fillRect(pipe.x - capOverhang, pipe.gapEnd, pipe.width + capOverhang * 2, capH)
+
+    ctx.fillStyle = '#4a7a28'
+    ctx.fillRect(pipe.x - capOverhang, pipe.gapStart - capH, pipe.width + capOverhang * 2, 3)
+    ctx.fillRect(pipe.x - capOverhang, pipe.gapEnd, pipe.width + capOverhang * 2, 3)
+
+    ctx.fillStyle = '#5a9a25'
+    ctx.fillRect(pipe.x + 4, 0, 6, pipe.gapStart - capH)
+    ctx.fillRect(pipe.x + 4, pipe.gapEnd + capH, 6, CANVAS_H - pipe.gapEnd - capH)
+  }
+}
+
+function drawAvatar(
   ctx: CanvasRenderingContext2D,
   image: HTMLImageElement,
   player: PlayerPhysics,
-  size: number
+  size: number,
 ) {
-  ctx.save();
+  ctx.save()
+  ctx.translate(player.x, player.y)
+  ctx.rotate((player.rotation * Math.PI) / 180)
 
-  // Move to player position
-  ctx.translate(player.x, player.y);
+  ctx.save()
+  ctx.beginPath()
+  ctx.arc(0, 0, size / 2, 0, Math.PI * 2)
+  ctx.clip()
+  ctx.drawImage(image, -size / 2, -size / 2, size, size)
+  ctx.restore()
 
-  // Rotate based on physics rotation
-  ctx.rotate((player.rotation * Math.PI) / 180);
+  ctx.strokeStyle = 'rgba(255,255,255,0.6)'
+  ctx.lineWidth = 2
+  ctx.beginPath()
+  ctx.arc(0, 0, size / 2, 0, Math.PI * 2)
+  ctx.stroke()
 
-  // Draw circle with clipping
-  ctx.beginPath();
-  ctx.arc(0, 0, size / 2, 0, Math.PI * 2);
-  ctx.clip();
-
-  // Draw image centered
-  ctx.drawImage(image, -size / 2, -size / 2, size, size);
-
-  ctx.restore();
-
-  // Draw circle outline
-  ctx.strokeStyle = 'rgba(255, 255, 255, 0.8)';
-  ctx.lineWidth = 1.5;
-  ctx.beginPath();
-  ctx.arc(player.x, player.y, size / 2, 0, Math.PI * 2);
-  ctx.stroke();
+  ctx.restore()
 }
 
-/**
- * Circle-rectangle collision detection
- * Player is a circle; pipes are rectangles
- */
-function checkCircleRectCollision(
-  player: PlayerPhysics,
-  pipe: Pipe,
-  canvasHeight: number
-): boolean {
-  const radius = player.width / 2;
-  const circleX = player.x;
-  const circleY = player.y;
-
-  // Check collision with upper pipe
-  if (circleY - radius < pipe.gapStart) {
-    const rect = {
-      left: pipe.x,
-      right: pipe.x + pipe.width,
-      top: 0,
-      bottom: pipe.gapStart,
-    };
-    if (isCircleInRect(circleX, circleY, radius, rect)) {
-      return true;
-    }
+function drawFlapParticles(
+  ctx: CanvasRenderingContext2D,
+  particles: { x: number; y: number; life: number }[],
+) {
+  for (const pt of particles) {
+    ctx.fillStyle = `rgba(255,255,255,${pt.life * 0.5})`
+    ctx.beginPath()
+    ctx.arc(pt.x - 20, pt.y, 4 * pt.life, 0, Math.PI * 2)
+    ctx.fill()
   }
-
-  // Check collision with lower pipe
-  if (circleY + radius > pipe.gapEnd) {
-    const rect = {
-      left: pipe.x,
-      right: pipe.x + pipe.width,
-      top: pipe.gapEnd,
-      bottom: canvasHeight,
-    };
-    if (isCircleInRect(circleX, circleY, radius, rect)) {
-      return true;
-    }
-  }
-
-  return false;
 }
 
-/**
- * Circle-rectangle collision check
- */
-function isCircleInRect(
-  circleX: number,
-  circleY: number,
-  radius: number,
-  rect: { left: number; right: number; top: number; bottom: number }
-): boolean {
-  const closestX = Math.max(rect.left, Math.min(circleX, rect.right));
-  const closestY = Math.max(rect.top, Math.min(circleY, rect.bottom));
-  const distX = circleX - closestX;
-  const distY = circleY - closestY;
-  return distX * distX + distY * distY < radius * radius;
+function drawScore(ctx: CanvasRenderingContext2D, w: number, score: number, screen: GameScreen) {
+  if (screen === 'MENU' || screen === 'GAME_OVER') return
+
+  ctx.font = 'bold 48px Arial, sans-serif'
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'top'
+  ctx.strokeStyle = '#000'
+  ctx.lineWidth = 4
+  ctx.strokeText(String(score), w / 2, 30)
+  ctx.fillStyle = '#fff'
+  ctx.fillText(String(score), w / 2, 30)
+}
+
+function drawMenuOverlay(ctx: CanvasRenderingContext2D, w: number, h: number, gh: number) {
+  ctx.textAlign = 'center'
+
+  ctx.font = 'bold 36px Arial, sans-serif'
+  ctx.textBaseline = 'bottom'
+  ctx.strokeStyle = '#000'
+  ctx.lineWidth = 4
+  ctx.strokeText('Flappy Avatar', w / 2, h / 2 - gh / 2 - 40)
+  ctx.fillStyle = '#fff'
+  ctx.fillText('Flappy Avatar', w / 2, h / 2 - gh / 2 - 40)
+
+  const blink = Math.sin(Date.now() / 400) > 0
+  if (blink) {
+    ctx.font = '18px Arial, sans-serif'
+    ctx.textBaseline = 'top'
+    ctx.strokeStyle = '#000'
+    ctx.lineWidth = 3
+    ctx.strokeText('Tap to Start', w / 2, h / 2 - gh / 2 + 40)
+    ctx.fillStyle = '#fff'
+    ctx.fillText('Tap to Start', w / 2, h / 2 - gh / 2 + 40)
+  }
+}
+
+function drawGameOver(
+  ctx: CanvasRenderingContext2D,
+  w: number, h: number, gh: number,
+  score: number, best: number,
+) {
+  ctx.fillStyle = 'rgba(0,0,0,0.45)'
+  ctx.fillRect(0, 0, w, h - gh)
+
+  ctx.textAlign = 'center'
+
+  ctx.font = 'bold 40px Arial, sans-serif'
+  ctx.textBaseline = 'middle'
+  ctx.strokeStyle = '#000'
+  ctx.lineWidth = 4
+  ctx.strokeText('GAME OVER', w / 2, h / 2 - gh / 2 - 90)
+  ctx.fillStyle = '#fff'
+  ctx.fillText('GAME OVER', w / 2, h / 2 - gh / 2 - 90)
+
+  const cx = w / 2
+  const cy = h / 2 - gh / 2 - 10
+  const cardW = 220
+  const cardH = 100
+
+  ctx.fillStyle = '#deb887'
+  ctx.strokeStyle = '#000'
+  ctx.lineWidth = 2
+  roundRect(ctx, cx - cardW / 2, cy - cardH / 2, cardW, cardH, 8)
+  ctx.fill()
+  ctx.stroke()
+
+  ctx.textAlign = 'left'
+  ctx.textBaseline = 'middle'
+
+  ctx.font = '14px Arial, sans-serif'
+  ctx.fillStyle = '#666'
+  ctx.fillText('SCORE', cx - 30, cy - 18)
+  ctx.fillText('BEST', cx - 30, cy + 18)
+
+  ctx.textAlign = 'right'
+  ctx.font = 'bold 20px Arial, sans-serif'
+  ctx.fillStyle = '#333'
+  ctx.fillText(String(score), cx + cardW / 2 - 15, cy - 18)
+  ctx.fillText(String(best), cx + cardW / 2 - 15, cy + 18)
+
+  const medal = getMedal(score)
+  if (medal) {
+    ctx.save()
+    ctx.beginPath()
+    ctx.arc(cx - cardW / 2 + 36, cy, 18, 0, Math.PI * 2)
+    ctx.fillStyle = medal.color
+    ctx.fill()
+    ctx.strokeStyle = medal.border
+    ctx.lineWidth = 2
+    ctx.stroke()
+
+    ctx.font = '18px Arial, sans-serif'
+    ctx.textAlign = 'center'
+    ctx.textBaseline = 'middle'
+    ctx.fillStyle = '#fff'
+    ctx.fillText(medal.icon, cx - cardW / 2 + 36, cy + 1)
+    ctx.restore()
+  }
+
+  const blink = Math.sin(Date.now() / 400) > 0
+  if (blink) {
+    ctx.textAlign = 'center'
+    ctx.textBaseline = 'top'
+    ctx.font = '16px Arial, sans-serif'
+    ctx.strokeStyle = '#000'
+    ctx.lineWidth = 3
+    ctx.strokeText('Tap to Restart', w / 2, h / 2 - gh / 2 + 60)
+    ctx.fillStyle = '#fff'
+    ctx.fillText('Tap to Restart', w / 2, h / 2 - gh / 2 + 60)
+  }
+}
+
+function getMedal(score: number): { color: string; border: string; icon: string } | null {
+  if (score >= 40) return { color: '#e5e4e2', border: '#aaa', icon: '★' }
+  if (score >= 20) return { color: '#ffd700', border: '#b8860b', icon: '★' }
+  if (score >= 10) return { color: '#c0c0c0', border: '#888', icon: '◆' }
+  if (score >= 1) return { color: '#cd7f32', border: '#8b5a2b', icon: '●' }
+  return null
+}
+
+function roundRect(
+  ctx: CanvasRenderingContext2D,
+  x: number, y: number, w: number, h: number, r: number,
+) {
+  ctx.beginPath()
+  ctx.moveTo(x + r, y)
+  ctx.lineTo(x + w - r, y)
+  ctx.quadraticCurveTo(x + w, y, x + w, y + r)
+  ctx.lineTo(x + w, y + h - r)
+  ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h)
+  ctx.lineTo(x + r, y + h)
+  ctx.quadraticCurveTo(x, y + h, x, y + h - r)
+  ctx.lineTo(x, y + r)
+  ctx.quadraticCurveTo(x, y, x + r, y)
+  ctx.closePath()
+}
+
+// ===== COLLISION =====
+
+function checkCollision(player: PlayerPhysics, pipe: Pipe, groundY: number): boolean {
+  const r = player.width / 2
+  const cx = player.x, cy = player.y
+
+  const rects = [
+    { l: pipe.x, r: pipe.x + pipe.width, t: 0, b: pipe.gapStart },
+    { l: pipe.x, r: pipe.x + pipe.width, t: pipe.gapEnd, b: groundY },
+  ]
+  for (const rect of rects) {
+    const closestX = Math.max(rect.l, Math.min(cx, rect.r))
+    const closestY = Math.max(rect.t, Math.min(cy, rect.b))
+    const dx = cx - closestX, dy = cy - closestY
+    if (dx * dx + dy * dy < r * r) return true
+  }
+  return false
+}
+
+// ===== EVENTS =====
+
+function setupEvents(canvas: HTMLCanvasElement, flap: () => void): (() => void)[] {
+  const onKey = (e: KeyboardEvent) => {
+    if (e.code === 'Space') { e.preventDefault(); flap() }
+  }
+  const onClick = () => flap()
+  const onTouch = (e: TouchEvent) => { e.preventDefault(); flap() }
+
+  window.addEventListener('keydown', onKey)
+  canvas.addEventListener('click', onClick)
+  canvas.addEventListener('touchstart', onTouch, { passive: false })
+
+  return [
+    () => window.removeEventListener('keydown', onKey),
+    () => canvas.removeEventListener('click', onClick),
+    () => canvas.removeEventListener('touchstart', onTouch),
+  ]
 }
