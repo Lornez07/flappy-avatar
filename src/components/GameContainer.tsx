@@ -119,51 +119,52 @@ export const GameContainer: React.FC = () => {
         />
 
         {showSubmit ? (
-          <div className="bg-white/5 backdrop-blur-xl rounded-2xl p-4 border border-white/10 shadow-2xl space-y-3">
+          <div className="bg-white/5 backdrop-blur-xl rounded-2xl p-3 border border-white/10 shadow-2xl space-y-2">
             <div className="flex items-center justify-between">
-              <div>
-                <p className="text-xs text-white/40 font-semibold tracking-wider uppercase">Score</p>
-                <p className="text-2xl font-bold text-white">{score}</p>
+              <div className="flex items-center gap-3">
+                <span className="text-white/40 text-xs font-semibold tracking-wider">Score</span>
+                <span className="text-xl font-bold text-white">{score}</span>
               </div>
-              <div className="text-right">
-                <p className="text-xs text-white/40 font-semibold tracking-wider uppercase">Best</p>
-                <p className="text-2xl font-bold text-cyan-400">{highScore}</p>
+              <div className="flex items-center gap-3">
+                <span className="text-white/40 text-xs font-semibold tracking-wider">Best</span>
+                <span className="text-xl font-bold text-cyan-400">{highScore}</span>
               </div>
             </div>
 
             {isNewBest && (
-              <p className="text-center text-amber-400 text-sm font-bold">New Personal Best!</p>
+              <p className="text-center text-amber-400 text-xs font-bold">New Personal Best!</p>
             )}
 
             {!submitted ? (
-              <>
+              <div className="flex gap-2">
                 <input
                   type="text"
-                  placeholder="Enter your name"
+                  placeholder="Your name"
                   maxLength={50}
                   value={playerName}
                   onChange={e => setPlayerName(e.target.value)}
-                  className="w-full px-3 py-2.5 rounded-xl bg-black/30 border border-white/10 text-white text-sm placeholder-white/30 focus:outline-none focus:border-cyan-400/50 transition"
+                  className="flex-1 min-w-0 px-3 py-2 rounded-xl bg-black/30 border border-white/10 text-white text-sm placeholder-white/30 focus:outline-none focus:border-cyan-400/50 transition"
                 />
-                {submitError && (
-                  <p className="text-red-400 text-xs">{submitError}</p>
-                )}
                 <button
                   onClick={handleSubmitScore}
                   disabled={submitting}
-                  className="w-full bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 disabled:opacity-40 text-white font-bold py-2.5 rounded-xl text-sm transition-all duration-200 shadow-lg shadow-cyan-500/20"
+                  className="shrink-0 bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 disabled:opacity-40 text-white font-bold px-4 py-2 rounded-xl text-sm transition-all duration-200 shadow-lg shadow-cyan-500/20"
                 >
-                  {submitting ? 'Submitting...' : 'Submit Score'}
+                  {submitting ? '...' : 'Submit'}
                 </button>
-              </>
+              </div>
             ) : (
-              <p className="text-center text-green-400 text-sm font-semibold">Score submitted!</p>
+              <p className="text-center text-green-400 text-xs font-semibold">Score submitted!</p>
             )}
 
-            <div className="pt-1 border-t border-white/10">
+            {submitError && (
+              <p className="text-red-400 text-xs">{submitError}</p>
+            )}
+
+            <div className="border-t border-white/10 pt-2 max-h-[220px] overflow-y-auto">
               <Leaderboard
                 playerName={playerName}
-                limit={10}
+                limit={5}
               />
             </div>
           </div>
