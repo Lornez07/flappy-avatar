@@ -11,12 +11,12 @@ interface Props {
 }
 
 const PHYSICS: PhysicsConfig = {
-  gravity: 0.55, flapStrength: -11, maxVelocity: 14,
-  rotationFlap: -22, rotationMax: 75, rotationLerpSpeed: 0.09,
+  gravity: 0.45, flapStrength: -9.5, maxVelocity: 12,
+  rotationFlap: -18, rotationMax: 65, rotationLerpSpeed: 0.08,
 }
 
 const PIPE: PipeConfig = {
-  width: 54, gap: 146, spacing: 190, minGapY: 60, speed: 5,
+  width: 52, gap: 158, spacing: 175, minGapY: 90, speed: 4.5,
 }
 
 const W = 400, H = 600, GROUND_H = 100, AVATAR_R = 18, PLAYER_X = 85
@@ -73,6 +73,7 @@ export const GameCanvas: React.FC<Props> = ({
     function onInput() {
       if (screen.current === 'MENU') {
         screen.current = 'PLAYING'
+        pipeTimer.current = PIPE.spacing - 50
         const pl = p.current
         pl.velocityY = PHYSICS.flapStrength
         pl.rotation = PHYSICS.rotationFlap
@@ -88,8 +89,10 @@ export const GameCanvas: React.FC<Props> = ({
         pl.rotation = PHYSICS.rotationFlap
         for (let i = 0; i < 8; i++) {
           particles.current.push({
-            x: pl.x - 10, y: pl.y,
-            life: 1, vx: -2 - Math.random() * 3, vy: -2 + Math.random() * 4,
+            x: pl.x - 16 + Math.random() * 8,
+            y: pl.y - 4 + Math.random() * 8,
+            life: 0.8 + Math.random() * 0.2,
+            vx: -2 - Math.random() * 2, vy: -1 + Math.random() * 3,
           })
         }
       }
