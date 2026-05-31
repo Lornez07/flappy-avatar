@@ -161,7 +161,7 @@ export const GameContainer: React.FC = () => {
               <p className="text-red-400 text-xs">{submitError}</p>
             )}
 
-            <div className="border-t border-white/10 pt-2 max-h-[220px] overflow-y-auto">
+            <div className="border-t border-white/10 pt-2 max-h-[220px] overflow-y-auto scrollbar-none">
               <Leaderboard
                 playerName={playerName}
                 limit={5}
