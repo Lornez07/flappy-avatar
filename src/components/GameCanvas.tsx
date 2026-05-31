@@ -70,23 +70,10 @@ export const GameCanvas: React.FC<Props> = ({
       particles.current = []; screen.current = 'MENU'
     }
 
-    function spawnPipe(x: number) {
-      const minY = PIPE.minGapY
-      const maxY = H - GROUND_H - PIPE.gap - PIPE.minGapY
-      const gs = minY + Math.random() * (maxY - minY)
-      pipes.current.push({ x, gapStart: gs, gapEnd: gs + PIPE.gap, scored: false, width: PIPE.width })
-    }
-
     function onInput() {
       if (screen.current === 'MENU') {
         screen.current = 'PLAYING'
-        pipes.current = []
-        const pipeDist = PIPE.spacing * PIPE.speed
-        const count = Math.ceil(W / pipeDist) + 2
-        for (let i = 0; i < count; i++) {
-          spawnPipe(W + i * pipeDist - pipeDist)
-        }
-        pipeTimer.current = 0
+        pipeTimer.current = PIPE.spacing - 50
         const pl = p.current
         pl.velocityY = PHYSICS.flapStrength
         pl.rotation = PHYSICS.rotationFlap
@@ -141,7 +128,10 @@ export const GameCanvas: React.FC<Props> = ({
 
       pipeTimer.current++
       if (pipeTimer.current > PIPE.spacing) {
-        spawnPipe(W)
+        const minY = PIPE.minGapY
+        const maxY = H - GROUND_H - PIPE.gap - PIPE.minGapY
+        const gs = minY + Math.random() * (maxY - minY)
+        pipes.current.push({ x: W, gapStart: gs, gapEnd: gs + PIPE.gap, scored: false, width: PIPE.width })
         pipeTimer.current = 0
       }
 
