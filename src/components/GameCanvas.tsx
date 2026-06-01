@@ -21,6 +21,8 @@ const PIPE: PipeConfig = {
 }
 
 const W = 400, H = 600, GROUND_H = 100, AVATAR_R = 18, PLAYER_X = 85
+const TARGET_FRAME_MS = 1000 / 60
+const MAX_DT = 3
 
 type Screen = 'MENU' | 'PLAYING' | 'GAME_OVER'
 
@@ -100,25 +102,25 @@ export const GameCanvas: React.FC<Props> = ({
       }
     }
 
-    function tick() {
+    function tick(dt: number) {
       const scr = screen.current
       const pl = p.current
 
-      groundOff.current = (groundOff.current + PIPE.speed) % 24
-      neonPulse.current += 0.03
+      groundOff.current = (groundOff.current + PIPE.speed * dt) % 24
+      neonPulse.current += 0.03 * dt
 
       if (scr === 'MENU') {
-        bob.current += 0.04
+        bob.current += 0.04 * dt
         pl.y = (H / 2 - GROUND_H / 2) + Math.sin(bob.current) * 8
         return
       }
       if (scr === 'GAME_OVER') return
 
-      pl.velocityY = Math.min(pl.velocityY + PHYSICS.gravity, PHYSICS.maxVelocity)
-      pl.y += pl.velocityY
+      pl.velocityY = Math.min(pl.velocityY + PHYSICS.gravity * dt, PHYSICS.maxVelocity)
+      pl.y += pl.velocityY * dt
 
       const target = pl.velocityY > 0 ? PHYSICS.rotationMax : PHYSICS.rotationFlap
-      pl.rotation += (target - pl.rotation) * PHYSICS.rotationLerpSpeed
+      pl.rotation += (target - pl.rotation) * PHYSICS.rotationLerpSpeed * dt
 
       if (pl.y + pl.height / 2 > H - GROUND_H || pl.y - pl.height / 2 < 0) {
         playHit()
@@ -129,7 +131,7 @@ export const GameCanvas: React.FC<Props> = ({
         return
       }
 
-      pipeTimer.current++
+      pipeTimer.current += 1 * dt
       if (pipeTimer.current > PIPE.spacing) {
         const minY = PIPE.minGapY
         const maxY = H - GROUND_H - PIPE.gap - PIPE.minGapY
@@ -140,7 +142,7 @@ export const GameCanvas: React.FC<Props> = ({
 
       for (let i = pipes.current.length - 1; i >= 0; i--) {
         const pipe = pipes.current[i]
-        pipe.x -= PIPE.speed
+        pipe.x -= PIPE.speed * dt
 
         if (!pipe.scored && pipe.x + pipe.width < pl.x - pl.width / 2) {
           score.current++; pipe.scored = true; playScore(); onScore(score.current)
@@ -158,7 +160,7 @@ export const GameCanvas: React.FC<Props> = ({
       }
 
       particles.current = particles.current
-        .map(pt => ({ ...pt, x: pt.x + pt.vx, y: pt.y + pt.vy, life: pt.life - 0.035 }))
+        .map(pt => ({ ...pt, x: pt.x + pt.vx * dt, y: pt.y + pt.vy * dt, life: pt.life - 0.035 * dt }))
         .filter(pt => pt.life > 0)
     }
 
@@ -189,7 +191,12 @@ export const GameCanvas: React.FC<Props> = ({
     }
 
     let raf: number
-    function loop() { tick(); render(); raf = requestAnimationFrame(loop) }
+    let lastTime = performance.now()
+    function loop(now: number) {
+      const dt = Math.min((now - lastTime) / TARGET_FRAME_MS, MAX_DT)
+      lastTime = now
+      tick(dt); render(); raf = requestAnimationFrame(loop)
+    }
     raf = requestAnimationFrame(loop)
 
     const clean = bindEvents(canvas, onInput)
