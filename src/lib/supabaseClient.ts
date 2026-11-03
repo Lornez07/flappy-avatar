@@ -10,65 +10,31 @@
  * 6. Enable CORS on the bucket for your domain
  */
 
-import { createClient } from '@supabase/supabase-js';
+import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { LeaderboardEntry, LeaderboardResponse } from '../types';
+import { clampScore, sanitizePlayerName } from './validation';
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
 const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
 
-if (!supabaseUrl || !supabaseKey) {
-  console.warn('Supabase credentials not configured. Leaderboard features disabled.');
-}
-
-export const supabase = createClient(supabaseUrl, supabaseKey);
-
-// ============================================================================
-// AVATAR UPLOAD
-// ============================================================================
-
 /**
- * Upload cropped avatar to Supabase Storage
- *
- * @param canvasDataUrl - Base64 data URL from canvas.toDataURL()
- * @param playerName - Player name for filename
- * @returns Public URL of uploaded image or null on error
+ * Whether Supabase credentials are present. The client is created lazily so a
+ * missing .env.local degrades the leaderboard instead of crashing on import.
  */
-export async function uploadAvatarToStorage(
-  canvasDataUrl: string,
-  playerName: string
-): Promise<string | null> {
-  try {
-    // Convert data URL to blob
-    const response = await fetch(canvasDataUrl);
-    const blob = await response.blob();
+export const isSupabaseConfigured = Boolean(supabaseUrl && supabaseKey);
 
-    // Create unique filename
-    const timestamp = Date.now();
-    const filename = `${playerName.replace(/[^a-z0-9]/gi, '-').toLowerCase()}-${timestamp}.png`;
+export const NOT_CONFIGURED_ERROR =
+  'Leaderboard is not configured. Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY.';
 
-    // Upload to storage
-    const { data, error } = await supabase.storage
-      .from('avatars')
-      .upload(filename, blob, {
-        contentType: 'image/png',
-        upsert: false,
-      });
+let client: SupabaseClient | null = null;
 
-    if (error) {
-      console.error('Avatar upload error:', error);
-      return null;
-    }
-
-    // Get public URL
-    const { data: publicData } = supabase.storage
-      .from('avatars')
-      .getPublicUrl(data.path);
-
-    return publicData.publicUrl;
-  } catch (error) {
-    console.error('Avatar upload exception:', error);
+function getSupabase(): SupabaseClient | null {
+  if (!isSupabaseConfigured) {
+    console.warn('Supabase credentials not configured. Leaderboard features disabled.');
     return null;
   }
+  if (!client) client = createClient(supabaseUrl, supabaseKey);
+  return client;
 }
 
 // ============================================================================
@@ -78,9 +44,9 @@ export async function uploadAvatarToStorage(
 /**
  * Submit score to leaderboard
  *
- * @param playerName - Player name (max 50 chars)
- * @param score - Game score
- * @param avatarUrl - Public URL of avatar image (optional)
+ * @param playerName - Player name (sanitized, max 24 chars)
+  * @param score - Game score (clamped to 0..999999)
+  * @param avatarUrl - Small data-URL or public URL avatar image (optional)
  * @returns Success status
  */
 export async function submitScore(
@@ -88,13 +54,25 @@ export async function submitScore(
   score: number,
   avatarUrl?: string
 ): Promise<{ success: boolean; error?: string }> {
+  const supabase = getSupabase();
+  if (!supabase) return { success: false, error: NOT_CONFIGURED_ERROR };
+
+  const name = sanitizePlayerName(playerName);
+  if (!name) return { success: false, error: 'Enter a valid name' };
+
+  // Note: this is a client-side sanity check for UX only. The authoritative
+  // limits live in schema.sql constraints and the anti-abuse trigger.
+  const safeScore = clampScore(score);
+
+  const avatar = avatarUrl && avatarUrl.length <= 200_000 ? avatarUrl : null;
+
   try {
     const { error } = await supabase
       .from('leaderboards')
       .insert({
-        player_name: playerName.slice(0, 50),
-        score: Math.max(0, Math.min(score, 999999)), // Sanity check
-        avatar_url: avatarUrl || null,
+        player_name: name,
+        score: safeScore,
+        avatar_url: avatar,
       });
 
     if (error) {
@@ -122,12 +100,17 @@ export async function submitScore(
 export async function fetchLeaderboard(
   limit: number = 10
 ): Promise<LeaderboardResponse> {
+  const supabase = getSupabase();
+  if (!supabase) return { data: [], error: NOT_CONFIGURED_ERROR };
+
   try {
     const sanitizedLimit = Math.min(Math.max(1, limit), 100);
 
+    // Only the columns the UI renders — never expose avatar payloads of the
+    // whole table, and keep the response small.
     const { data, error } = await supabase
       .from('leaderboards')
-      .select('*')
+      .select('id, player_name, score, avatar_url, created_at')
       .order('score', { ascending: false })
       .limit(sanitizedLimit);
 
@@ -152,11 +135,17 @@ export async function fetchLeaderboard(
 export async function fetchPlayerBest(
   playerName: string
 ): Promise<LeaderboardEntry | null> {
+  const supabase = getSupabase();
+  if (!supabase) return null;
+
+  const name = sanitizePlayerName(playerName);
+  if (!name) return null;
+
   try {
     const { data, error } = await supabase
       .from('leaderboards')
-      .select('*')
-      .eq('player_name', playerName)
+      .select('id, player_name, score, avatar_url, created_at')
+      .eq('player_name', name)
       .order('score', { ascending: false })
       .limit(1)
       .single();
@@ -191,30 +180,64 @@ export async function fetchLeaderboardWithPlayerRank(
   playerRecord: LeaderboardEntry | null;
   error?: string;
 }> {
-  try {
-    const { data, error } = await supabase
-      .from('leaderboards')
-      .select('*')
-      .order('score', { ascending: false });
+  const supabase = getSupabase();
+  if (!supabase) {
+    return {
+      leaderboard: [],
+      playerRank: null,
+      playerRecord: null,
+      error: NOT_CONFIGURED_ERROR,
+    };
+  }
 
-    if (error) {
+  const name = sanitizePlayerName(playerName);
+  const sanitizedLimit = Math.min(Math.max(1, limit), 100);
+
+  try {
+    // Fetch only enough rows to cover the visible top-N plus the player's own
+    // best, instead of streaming the entire table to the browser.
+    const [topResult, playerResult] = await Promise.all([
+      supabase
+        .from('leaderboards')
+        .select('id, player_name, score, avatar_url, created_at')
+        .order('score', { ascending: false })
+        .limit(sanitizedLimit),
+      name
+        ? supabase
+            .from('leaderboards')
+            .select('id, player_name, score, avatar_url, created_at')
+            .eq('player_name', name)
+            .order('score', { ascending: false })
+            .limit(1)
+        : Promise.resolve({ data: [], error: null }),
+    ]);
+
+    if (topResult.error) {
       return {
         leaderboard: [],
         playerRank: null,
         playerRecord: null,
-        error: error.message,
+        error: topResult.error.message,
       };
     }
 
-    const allRecords = (data || []) as LeaderboardEntry[];
-    const leaderboard = allRecords.slice(0, limit);
+    const leaderboard = (topResult.data || []) as LeaderboardEntry[];
+    const playerRecord = ((playerResult.data || [])[0] as LeaderboardEntry) ?? null;
 
-    // Find player rank
-    const playerRecordIndex = allRecords.findIndex(
-      (r) => r.player_name.toLowerCase() === playerName.toLowerCase()
-    );
-    const playerRecord = playerRecordIndex >= 0 ? allRecords[playerRecordIndex] : null;
-    const playerRank = playerRecordIndex >= 0 ? playerRecordIndex + 1 : null;
+    // Rank is a count of strictly better scores; ties share the better rank.
+    let playerRank: number | null = null;
+    if (playerRecord) {
+      const inTop = leaderboard.findIndex((r) => r.score === playerRecord.score);
+      if (inTop >= 0) {
+        playerRank = inTop + 1;
+      } else {
+        const { count } = await supabase
+          .from('leaderboards')
+          .select('id', { count: 'exact', head: true })
+          .gt('score', playerRecord.score);
+        playerRank = (count ?? 0) + 1;
+      }
+    }
 
     return { leaderboard, playerRank, playerRecord };
   } catch (error) {

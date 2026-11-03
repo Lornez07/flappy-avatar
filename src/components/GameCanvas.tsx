@@ -1,6 +1,7 @@
 import React, { useEffect, useRef } from 'react'
 import { PlayerPhysics, PhysicsConfig, Pipe, PipeConfig, AvatarConfig, AVATAR_SKINS, NEON_COLORS } from '../types'
 import { playFlap, playScore, playHit } from '../lib/audio'
+import { frameDelta, hasClearedPipe, hitsPipe, randomGap } from '../lib/gameLogic'
 
 interface Props {
   avatarConfig: AvatarConfig
@@ -23,6 +24,13 @@ const PIPE: PipeConfig = {
 const W = 400, H = 600, GROUND_H = 100, AVATAR_R = 18, PLAYER_X = 85
 const TARGET_FRAME_MS = 1000 / 60
 const MAX_DT = 3
+
+const REDUCED_MOTION =
+  typeof window !== 'undefined' &&
+  typeof window.matchMedia === 'function' &&
+  window.matchMedia('(prefers-reduced-motion: reduce)').matches
+
+const PARTICLE_COUNT = REDUCED_MOTION ? 0 : 8
 
 type Screen = 'MENU' | 'PLAYING' | 'GAME_OVER'
 
@@ -52,8 +60,11 @@ export const GameCanvas: React.FC<Props> = ({
   useEffect(() => {
     const canvas = canvasRef.current
     if (!canvas) return
-    const ctx = canvas.getContext('2d')
-    if (!ctx) return
+    const ctx2d = canvas.getContext('2d')
+    if (!ctx2d) return
+    // Rebind to a non-null const so the nested render helpers below keep the
+    // narrowed type when they capture it.
+    const ctx: CanvasRenderingContext2D = ctx2d
 
     const dpr = window.devicePixelRatio || 1
     canvas.width = W * dpr
@@ -91,7 +102,7 @@ export const GameCanvas: React.FC<Props> = ({
         playFlap()
         pl.velocityY = PHYSICS.flapStrength
         pl.rotation = PHYSICS.rotationFlap
-        for (let i = 0; i < 8; i++) {
+        for (let i = 0; i < PARTICLE_COUNT; i++) {
           particles.current.push({
             x: pl.x - 16 + Math.random() * 8,
             y: pl.y - 4 + Math.random() * 8,
@@ -133,10 +144,8 @@ export const GameCanvas: React.FC<Props> = ({
 
       pipeTimer.current += 1 * dt
       if (pipeTimer.current > PIPE.spacing) {
-        const minY = PIPE.minGapY
-        const maxY = H - GROUND_H - PIPE.gap - PIPE.minGapY
-        const gs = minY + Math.random() * (maxY - minY)
-        pipes.current.push({ x: W, gapStart: gs, gapEnd: gs + PIPE.gap, scored: false, width: PIPE.width })
+        const { gapStart, gapEnd } = randomGap(Math.random, PIPE.minGapY, PIPE.gap, H, GROUND_H)
+        pipes.current.push({ x: W, gapStart, gapEnd, scored: false, width: PIPE.width })
         pipeTimer.current = 0
       }
 
@@ -144,11 +153,11 @@ export const GameCanvas: React.FC<Props> = ({
         const pipe = pipes.current[i]
         pipe.x -= PIPE.speed * dt
 
-        if (!pipe.scored && pipe.x + pipe.width < pl.x - pl.width / 2) {
+        if (!pipe.scored && hasClearedPipe(pl, pipe)) {
           score.current++; pipe.scored = true; playScore(); onScore(score.current)
         }
 
-        if (hit(pl, pipe, H - GROUND_H)) {
+        if (hitsPipe(pl, pipe, H - GROUND_H)) {
           playHit()
           screen.current = 'GAME_OVER'
           const fs = score.current
@@ -193,7 +202,7 @@ export const GameCanvas: React.FC<Props> = ({
     let raf: number
     let lastTime = performance.now()
     function loop(now: number) {
-      const dt = Math.min((now - lastTime) / TARGET_FRAME_MS, MAX_DT)
+      const dt = frameDelta(now - lastTime, TARGET_FRAME_MS, MAX_DT)
       lastTime = now
       tick(dt); render(); raf = requestAnimationFrame(loop)
     }
@@ -211,7 +220,10 @@ export const GameCanvas: React.FC<Props> = ({
     <div className="w-full max-w-[400px] mx-auto select-none" style={{ WebkitUserSelect: 'none', userSelect: 'none' }}>
       <canvas
         ref={canvasRef}
-        className="w-full aspect-[2/3] shadow-2xl cursor-pointer touch-none rounded-2xl"
+        role="application"
+        aria-label="Flappy Avatar game. Press Space, tap, or click to flap."
+        tabIndex={0}
+        className="game-canvas w-full aspect-[2/3] cursor-pointer touch-none focus:outline-none"
       />
     </div>
   )
@@ -219,37 +231,42 @@ export const GameCanvas: React.FC<Props> = ({
 
 function sky(ctx: CanvasRenderingContext2D) {
   const g = ctx.createLinearGradient(0, 0, 0, H)
-  g.addColorStop(0, '#0f0c29')
-  g.addColorStop(0.4, '#1a1a4e')
-  g.addColorStop(0.7, '#243b80')
-  g.addColorStop(1, '#4a6fa5')
+  g.addColorStop(0, '#8bcbd2')
+  g.addColorStop(0.55, '#c5dfd4')
+  g.addColorStop(1, '#f4e3ae')
   ctx.fillStyle = g; ctx.fillRect(0, 0, W, H)
 
-  for (let i = 0; i < 30; i++) {
-    const x = (i * 37 + 13) % W
-    const y = (i * 53 + 7) % (H - GROUND_H)
-    const r = 0.5 + (i % 3) * 0.4
-    ctx.globalAlpha = 0.3 + (i % 5) * 0.1
-    ctx.fillStyle = '#fff'
-    ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill()
-  }
+  ctx.globalAlpha = 0.9
+  ctx.fillStyle = '#f4c84e'
+  ctx.beginPath(); ctx.arc(315, 105, 34, 0, Math.PI * 2); ctx.fill()
+  ctx.strokeStyle = 'rgba(255,250,226,0.65)'
+  ctx.lineWidth = 2
+  ctx.beginPath(); ctx.arc(315, 105, 42, 0, Math.PI * 2); ctx.stroke()
   ctx.globalAlpha = 1
+
+  ctx.fillStyle = 'rgba(71, 121, 104, 0.16)'
+  ctx.beginPath()
+  ctx.moveTo(0, 443); ctx.quadraticCurveTo(87, 390, 181, 444)
+  ctx.quadraticCurveTo(280, 390, W, 430); ctx.lineTo(W, H - GROUND_H)
+  ctx.lineTo(0, H - GROUND_H); ctx.closePath(); ctx.fill()
 }
 
 function clouds(ctx: CanvasRenderingContext2D, off: number) {
-  ctx.globalAlpha = 0.08
-  ctx.fillStyle = '#fff'
+  ctx.globalAlpha = 0.7
+  ctx.fillStyle = '#fffaf0'
   const list = [
-    { x: 30, y: 50, w: 80, h: 16 },
-    { x: 180, y: 30, w: 100, h: 14 },
-    { x: 300, y: 70, w: 60, h: 12 },
-    { x: 100, y: 100, w: 90, h: 18 },
+    { x: 30, y: 150, w: 80, h: 24 },
+    { x: 180, y: 220, w: 100, h: 20 },
+    { x: 300, y: 70, w: 60, h: 19 },
+    { x: 100, y: 325, w: 90, h: 25 },
   ]
   const speed = 0.2
   for (const c of list) {
     const cx = ((c.x + off * speed) % (W + 150)) - 75
     ctx.beginPath()
     ctx.ellipse(cx, c.y, c.w / 2, c.h / 2, 0, 0, Math.PI * 2)
+    ctx.ellipse(cx - c.w * 0.2, c.y - c.h * 0.35, c.w * 0.24, c.h * 0.45, 0, 0, Math.PI * 2)
+    ctx.ellipse(cx + c.w * 0.17, c.y - c.h * 0.22, c.w * 0.29, c.h * 0.52, 0, 0, Math.PI * 2)
     ctx.fill()
   }
   ctx.globalAlpha = 1
@@ -258,32 +275,26 @@ function clouds(ctx: CanvasRenderingContext2D, off: number) {
 function ground(ctx: CanvasRenderingContext2D, off: number) {
   const gy = H - GROUND_H
 
-  ctx.fillStyle = '#0d1117'
+  ctx.fillStyle = '#e2c36d'
   ctx.fillRect(0, gy, W, GROUND_H)
 
-  const g2 = ctx.createLinearGradient(0, gy, 0, gy + 4)
-  g2.addColorStop(0, '#1a1a2e')
-  g2.addColorStop(1, '#16213e')
-  ctx.fillStyle = g2
-  ctx.fillRect(0, gy, W, 4)
+  ctx.fillStyle = '#5b7b4d'
+  ctx.fillRect(0, gy, W, 12)
+  ctx.fillStyle = '#344f3a'
+  ctx.fillRect(0, gy + 12, W, 3)
 
-  ctx.strokeStyle = 'rgba(0, 240, 255, 0.08)'
+  ctx.strokeStyle = 'rgba(98, 76, 35, 0.22)'
   ctx.lineWidth = 1
-  for (let x = -off; x < W + 24; x += 24) {
+  for (let x = -off; x < W + 28; x += 28) {
     ctx.beginPath()
-    ctx.moveTo(x, gy + 4)
-    ctx.lineTo(x + 12, gy + 8)
-    ctx.lineTo(x + 24, gy + 4)
+    ctx.moveTo(x, gy + 25)
+    ctx.lineTo(x + 14, gy + 31)
+    ctx.lineTo(x + 28, gy + 25)
     ctx.stroke()
   }
 
-  ctx.fillStyle = 'rgba(0, 240, 255, 0.03)'
-  for (let x = -off; x < W + 24; x += 24) {
-    ctx.fillRect(x, gy + 8, 24, 2)
-  }
-
-  ctx.fillStyle = 'rgba(0, 240, 255, 0.06)'
-  ctx.fillRect(0, H - 2, W, 2)
+  ctx.fillStyle = 'rgba(255, 247, 215, 0.38)'
+  ctx.fillRect(0, H - 3, W, 3)
 }
 
 function obstacles(ctx: CanvasRenderingContext2D, pipes: Pipe[]) {
@@ -291,36 +302,26 @@ function obstacles(ctx: CanvasRenderingContext2D, pipes: Pipe[]) {
     const co = 8
     const ch = 24
 
-    ctx.shadowColor = 'rgba(0, 240, 255, 0.15)'
-    ctx.shadowBlur = 8
-
-    const grad1 = ctx.createLinearGradient(pipe.x, 0, pipe.x + pipe.width, 0)
-    grad1.addColorStop(0, '#1a3a5c')
-    grad1.addColorStop(0.5, '#2a5a8c')
-    grad1.addColorStop(1, '#1a3a5c')
-    ctx.fillStyle = grad1
+    ctx.shadowColor = 'rgba(55, 39, 27, 0.18)'
+    ctx.shadowBlur = 5
+    ctx.fillStyle = '#c7493c'
     ctx.fillRect(pipe.x, 0, pipe.width, pipe.gapStart)
     ctx.fillRect(pipe.x, pipe.gapEnd, pipe.width, H - pipe.gapEnd)
 
-    ctx.shadowBlur = 12
-    const capGrad = ctx.createLinearGradient(pipe.x - co, 0, pipe.x + pipe.width + co * 2, 0)
-    capGrad.addColorStop(0, '#0f3460')
-    capGrad.addColorStop(0.5, '#1a5276')
-    capGrad.addColorStop(1, '#0f3460')
-    ctx.fillStyle = capGrad
+    ctx.shadowBlur = 6
+    ctx.fillStyle = '#a93c33'
     ctx.fillRect(pipe.x - co, pipe.gapStart - ch, pipe.width + co * 2, ch)
     ctx.fillRect(pipe.x - co, pipe.gapEnd, pipe.width + co * 2, ch)
 
-    ctx.shadowBlur = 4
-    ctx.fillStyle = 'rgba(0, 240, 255, 0.08)'
-    ctx.fillRect(pipe.x + 6, ch, 4, pipe.gapStart - ch)
-    ctx.fillRect(pipe.x + 6, pipe.gapEnd + ch, 4, H - pipe.gapEnd - ch - GROUND_H)
-
     ctx.shadowBlur = 0
     ctx.shadowColor = 'transparent'
-
-    ctx.strokeStyle = 'rgba(0, 240, 255, 0.06)'
-    ctx.lineWidth = 1
+    ctx.fillStyle = 'rgba(255, 238, 199, 0.72)'
+    ctx.fillRect(pipe.x + 8, 0, 5, Math.max(0, pipe.gapStart - ch))
+    ctx.fillRect(pipe.x + 8, pipe.gapEnd + ch, 5, Math.max(0, H - pipe.gapEnd - ch - GROUND_H))
+    ctx.strokeStyle = '#74362e'
+    ctx.lineWidth = 2
+    ctx.strokeRect(pipe.x, 0, pipe.width, pipe.gapStart)
+    ctx.strokeRect(pipe.x, pipe.gapEnd, pipe.width, H - pipe.gapEnd)
     ctx.strokeRect(pipe.x - co, pipe.gapStart - ch, pipe.width + co * 2, ch)
     ctx.strokeRect(pipe.x - co, pipe.gapEnd, pipe.width + co * 2, ch)
   }
@@ -336,24 +337,24 @@ function drawAvatar(
   pulse: number,
 ) {
   const r = AVATAR_R
-  const glowIntensity = 0.6 + Math.sin(pulse * 2) * 0.3
+  const glowIntensity = 0.45 + Math.sin(pulse * 2) * 0.12
 
   ctx.save()
   ctx.translate(pl.x, pl.y)
   ctx.rotate((pl.rotation * Math.PI) / 180)
 
   ctx.shadowColor = neon.glow
-  ctx.shadowBlur = 20 * glowIntensity
+  ctx.shadowBlur = 9 * glowIntensity
 
   ctx.beginPath()
   ctx.arc(0, 0, r + 2, 0, Math.PI * 2)
-  ctx.fillStyle = `${neon.hex}22`
+  ctx.fillStyle = '#fffaf0'
   ctx.fill()
 
-  ctx.shadowBlur = 8
+  ctx.shadowBlur = 3
   ctx.beginPath()
   ctx.arc(0, 0, r, 0, Math.PI * 2)
-  ctx.fillStyle = '#1a1a2e'
+  ctx.fillStyle = '#fffaf0'
   ctx.fill()
 
   ctx.shadowBlur = 0
@@ -376,12 +377,17 @@ function drawAvatar(
     ctx.fillText(skin.emoji, 0, 1)
   }
 
-  ctx.shadowBlur = 4
+  ctx.shadowBlur = 2
   ctx.beginPath()
   ctx.arc(0, 0, r, 0, Math.PI * 2)
-  ctx.strokeStyle = neon.hex
+  ctx.strokeStyle = '#25231f'
   ctx.lineWidth = 2
   ctx.globalAlpha = glowIntensity
+  ctx.stroke()
+  ctx.beginPath()
+  ctx.arc(0, 0, r + 2, 0, Math.PI * 2)
+  ctx.strokeStyle = neon.hex
+  ctx.lineWidth = 2
   ctx.stroke()
   ctx.globalAlpha = 1
   ctx.shadowBlur = 0
@@ -392,88 +398,93 @@ function drawAvatar(
 function drawScore(ctx: CanvasRenderingContext2D, score: number, screen: Screen) {
   if (screen === 'MENU' || screen === 'GAME_OVER') return
 
-  ctx.font = 'bold 52px "Segoe UI", Arial, sans-serif'
+  ctx.font = 'bold 54px Impact, "Arial Narrow", sans-serif'
   ctx.textAlign = 'center'
   ctx.textBaseline = 'top'
 
-  ctx.shadowColor = 'rgba(0, 240, 255, 0.5)'
-  ctx.shadowBlur = 16
-  ctx.fillStyle = '#ffffff'
+  ctx.shadowColor = 'rgba(37, 35, 31, 0.18)'
+  ctx.shadowBlur = 2
+  ctx.fillStyle = '#25231f'
   ctx.fillText(String(score), W / 2, 20)
 
   ctx.shadowBlur = 0
-  ctx.strokeStyle = 'rgba(0,0,0,0.3)'
-  ctx.lineWidth = 2
+  ctx.strokeStyle = '#fffaf0'
+  ctx.lineWidth = 4
   ctx.strokeText(String(score), W / 2, 20)
+  ctx.fillStyle = '#25231f'
+  ctx.fillText(String(score), W / 2, 20)
 }
 
 function drawMenu(ctx: CanvasRenderingContext2D) {
   ctx.textAlign = 'center'
 
-  ctx.shadowColor = 'rgba(0, 240, 255, 0.4)'
-  ctx.shadowBlur = 20
-  ctx.font = 'bold 34px "Segoe UI", Arial, sans-serif'
+  ctx.shadowColor = 'rgba(37, 35, 31, 0.12)'
+  ctx.shadowBlur = 2
+  ctx.font = 'bold 37px Impact, "Arial Narrow", sans-serif'
   ctx.textBaseline = 'bottom'
-  ctx.fillStyle = '#fff'
+  ctx.fillStyle = '#25231f'
   ctx.fillText('Flappy Avatar', W / 2, H / 2 - GROUND_H / 2 - 50)
   ctx.shadowBlur = 0
 
-  ctx.font = '12px "Segoe UI", Arial, sans-serif'
+  ctx.font = 'bold 11px "Trebuchet MS", Arial, sans-serif'
   ctx.textBaseline = 'top'
-  ctx.fillStyle = 'rgba(255,255,255,0.35)'
-  ctx.fillText('CUSTOMIZE YOUR AVATAR — THEN TAP TO FLY', W / 2, H / 2 - GROUND_H / 2 + 50)
+  ctx.fillStyle = '#625e54'
+  ctx.fillText('YOUR AVATAR. YOUR FLIGHT.', W / 2, H / 2 - GROUND_H / 2 + 48)
 
   const blink = Math.sin(Date.now() / 380) > 0
   if (blink) {
-    ctx.shadowColor = 'rgba(0, 240, 255, 0.6)'
-    ctx.shadowBlur = 12
-    ctx.font = 'bold 16px "Segoe UI", Arial, sans-serif'
-    ctx.textBaseline = 'top'
-    ctx.fillStyle = '#fff'
-    ctx.fillText('TAP TO START', W / 2, H / 2 - GROUND_H / 2 + 80)
+    const x = W / 2 - 73
+    const y = H / 2 - GROUND_H / 2 + 72
+    ctx.fillStyle = '#d84c3f'
+    roundRect(ctx, x, y, 146, 34, 5)
+    ctx.fill()
+    ctx.font = 'bold 14px "Trebuchet MS", Arial, sans-serif'
+    ctx.textBaseline = 'middle'
+    ctx.fillStyle = '#fffaf0'
+    ctx.fillText('TAP TO START', W / 2, y + 17)
     ctx.shadowBlur = 0
   }
 }
 
 function drawGameOver(ctx: CanvasRenderingContext2D, score: number, best: number) {
-  ctx.fillStyle = 'rgba(0, 0, 0, 0.55)'
+  ctx.fillStyle = 'rgba(243, 237, 223, 0.84)'
   ctx.fillRect(0, 0, W, H - GROUND_H)
 
   ctx.textAlign = 'center'
 
-  ctx.shadowColor = 'rgba(255, 0, 68, 0.4)'
-  ctx.shadowBlur = 24
-  ctx.font = 'bold 38px "Segoe UI", Arial, sans-serif'
+  ctx.shadowColor = 'rgba(37, 35, 31, 0.12)'
+  ctx.shadowBlur = 2
+  ctx.font = 'bold 39px Impact, "Arial Narrow", sans-serif'
   ctx.textBaseline = 'middle'
-  ctx.fillStyle = '#ff3355'
-  ctx.fillText('GAME OVER', W / 2, H / 2 - GROUND_H / 2 - 90)
+  ctx.fillStyle = '#b83b32'
+  ctx.fillText('FLIGHT OVER', W / 2, H / 2 - GROUND_H / 2 - 90)
   ctx.shadowBlur = 0
 
   const cx = W / 2
   const cy = H / 2 - GROUND_H / 2 - 5
   const cw = 230, ch = 110
 
-  ctx.shadowColor = 'rgba(0, 240, 255, 0.1)'
-  ctx.shadowBlur = 16
-  ctx.fillStyle = 'rgba(15, 12, 41, 0.85)'
-  roundRect(ctx, cx - cw / 2, cy - ch / 2, cw, ch, 12)
+  ctx.shadowColor = 'rgba(37, 35, 31, 0.2)'
+  ctx.shadowBlur = 3
+  ctx.fillStyle = '#fffaf0'
+  roundRect(ctx, cx - cw / 2, cy - ch / 2, cw, ch, 5)
   ctx.fill()
-  ctx.strokeStyle = 'rgba(0, 240, 255, 0.15)'
-  ctx.lineWidth = 1
+  ctx.strokeStyle = '#25231f'
+  ctx.lineWidth = 2
   ctx.stroke()
   ctx.shadowBlur = 0
 
   ctx.textAlign = 'left'
   ctx.textBaseline = 'middle'
 
-  ctx.font = '12px "Segoe UI", Arial, sans-serif'
-  ctx.fillStyle = 'rgba(255,255,255,0.4)'
+  ctx.font = 'bold 11px "Trebuchet MS", Arial, sans-serif'
+  ctx.fillStyle = '#625e54'
   ctx.fillText('SCORE', cx - 35, cy - 18)
   ctx.fillText('BEST', cx - 35, cy + 18)
 
   ctx.textAlign = 'right'
-  ctx.font = 'bold 22px "Segoe UI", Arial, sans-serif'
-  ctx.fillStyle = '#fff'
+  ctx.font = 'bold 23px Impact, "Arial Narrow", sans-serif'
+  ctx.fillStyle = '#25231f'
   ctx.fillText(String(score), cx + cw / 2 - 16, cy - 18)
   ctx.fillText(String(best), cx + cw / 2 - 16, cy + 18)
 
@@ -493,7 +504,7 @@ function drawGameOver(ctx: CanvasRenderingContext2D, score: number, best: number
     ctx.font = '16px serif'
     ctx.textAlign = 'center'
     ctx.textBaseline = 'middle'
-    ctx.fillStyle = '#fff'
+    ctx.fillStyle = '#fffaf0'
     ctx.fillText(medal.icon, cx - cw / 2 + 35, cy + 1)
     ctx.restore()
   }
@@ -501,12 +512,10 @@ function drawGameOver(ctx: CanvasRenderingContext2D, score: number, best: number
   const blink = Math.sin(Date.now() / 380) > 0
   if (blink) {
     ctx.textAlign = 'center'
-    ctx.textBaseline = 'top'
-    ctx.font = 'bold 15px "Segoe UI", Arial, sans-serif'
-    ctx.shadowColor = 'rgba(0, 240, 255, 0.5)'
-    ctx.shadowBlur = 10
-    ctx.fillStyle = '#fff'
-    ctx.fillText('TAP TO RESTART', W / 2, H / 2 - GROUND_H / 2 + 65)
+    ctx.textBaseline = 'middle'
+    ctx.font = 'bold 12px "Trebuchet MS", Arial, sans-serif'
+    ctx.fillStyle = '#b83b32'
+    ctx.fillText('TAP ANYWHERE TO GO AGAIN', W / 2, H / 2 - GROUND_H / 2 + 70)
     ctx.shadowBlur = 0
   }
 }
@@ -532,24 +541,14 @@ function roundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: numbe
   ctx.closePath()
 }
 
-function hit(pl: PlayerPhysics, pipe: Pipe, groundY: number): boolean {
-  const r = pl.width / 2
-  const cx = pl.x, cy = pl.y
-  const rects = [
-    { l: pipe.x, r: pipe.x + pipe.width, t: 0, b: pipe.gapStart },
-    { l: pipe.x, r: pipe.x + pipe.width, t: pipe.gapEnd, b: groundY },
-  ]
-  for (const rect of rects) {
-    const cx2 = Math.max(rect.l, Math.min(cx, rect.r))
-    const cy2 = Math.max(rect.t, Math.min(cy, rect.b))
-    const dx = cx - cx2, dy = cy - cy2
-    if (dx * dx + dy * dy < r * r) return true
-  }
-  return false
-}
-
 function bindEvents(canvas: HTMLCanvasElement, input: () => void): (() => void)[] {
-  const kd = (e: KeyboardEvent) => { if (e.code === 'Space') { e.preventDefault(); input() } }
+  const kd = (e: KeyboardEvent) => {
+    if (e.code !== 'Space') return
+    const target = e.target
+    if (target instanceof HTMLElement && (target.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName))) return
+    e.preventDefault()
+    input()
+  }
   const cl = () => input()
   const tc = (e: TouchEvent) => { e.preventDefault(); input() }
   window.addEventListener('keydown', kd)

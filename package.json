@@ -5,7 +5,11 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vite build",
+    "build": "npm run typecheck && vite build",
+    "typecheck": "tsc -p tsconfig.app.json --noEmit",
+    "lint": "eslint src",
+    "test": "vitest",
+    "test:run": "vitest run",
     "preview": "vite preview"
   },
   "dependencies": {
@@ -15,13 +19,16 @@
     "react-dom": "^18.2.0"
   },
   "devDependencies": {
-    "@types/react": "^19.2.15",
-    "@types/react-dom": "^19.2.3",
+    "@eslint/js": "^9.39.5",
+    "@types/react": "^18.3.12",
+    "@types/react-dom": "^18.3.1",
     "@vitejs/plugin-react": "^6.0.2",
-    "autoprefixer": "^10.5.0",
-    "postcss": "^8.5.15",
+    "eslint": "^9.39.5",
+    "globals": "^15.15.0",
     "tailwindcss": "^4.3.0",
     "typescript": "^6.0.3",
-    "vite": "^8.0.14"
+    "typescript-eslint": "^8.72.1",
+    "vite": "^8.0.14",
+    "vitest": "^3.2.7"
   }
 }

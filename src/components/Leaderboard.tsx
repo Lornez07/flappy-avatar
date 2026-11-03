@@ -10,9 +10,9 @@ interface Props {
   limit?: number
 }
 
-const RANK_COLORS = ['#ffd700', '#c0c0c0', '#cd7f32']
+const RANK_COLORS = ['#d84c3f', '#4a8f9b', '#c08a30']
 
-const AVATAR_COLORS = ['#00f0ff', '#ff00e6', '#00ff66', '#ffd700', '#ff0044', '#4488ff', '#8800ff', '#ff8844', '#44ff88', '#ff4488']
+const AVATAR_COLORS = ['#4a8f9b', '#bd5962', '#66834f', '#d2a43d', '#d84c3f', '#536c9a', '#80618b', '#c0784e', '#5a8b72', '#bd7187']
 
 function stringToColor(s: string): string {
   let hash = 0
@@ -25,96 +25,111 @@ export const Leaderboard: React.FC<Props> = ({ playerName, limit = 10 }) => {
   const [playerRank, setPlayerRank] = useState<number | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [attempt, setAttempt] = useState(0)
 
   useEffect(() => {
+    let cancelled = false
+
     const load = async () => {
       setLoading(true)
       setError(null)
       try {
         if (playerName) {
           const res = await fetchLeaderboardWithPlayerRank(playerName, limit)
+          if (cancelled) return
           if (res.error) { setError(res.error) }
           else { setEntries(res.leaderboard); setPlayerRank(res.playerRank) }
         } else {
           const res = await fetchLeaderboard(limit)
+          if (cancelled) return
           if (res.error) { setError(res.error) }
-          else { setEntries(res.data) }
+          else { setEntries(res.data); setPlayerRank(null) }
         }
-      } finally { setLoading(false) }
+      } finally {
+        if (!cancelled) setLoading(false)
+      }
     }
     load()
-  }, [playerName, limit])
+
+    return () => { cancelled = true }
+  }, [playerName, limit, attempt])
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center py-6">
-        <div className="w-5 h-5 border-2 border-cyan-400/30 border-t-cyan-400 rounded-full animate-spin" />
-      </div>
+      <div className="leaderboard-loading" role="status" aria-label="Loading leaderboard">Checking the scorebook…</div>
     )
   }
 
   if (error) {
     return (
-      <p className="text-red-400/70 text-xs text-center py-4">{error}</p>
+      <div>
+        <p className="leaderboard-error">{error}</p>
+        <button
+          onClick={() => setAttempt(a => a + 1)}
+          className="leaderboard-retry"
+        >
+          TRY AGAIN
+        </button>
+      </div>
     )
   }
 
   if (!entries.length) {
     return (
-      <p className="text-white/30 text-xs text-center py-4">No scores yet — be the first!</p>
+      <p className="leaderboard-empty">No scores yet — make the first mark.</p>
     )
   }
 
   return (
-    <div>
-      <div className="flex items-center justify-between mb-3">
-        <h3 className="text-sm font-bold text-white/80 tracking-wider uppercase">Leaderboard</h3>
+    <div className="leaderboard">
+      <div className="leaderboard-heading">
+        <h3>HIGH SCORE CLUB</h3>
         {playerRank && (
-          <span className="text-xs text-cyan-400 font-semibold">
+          <span className="leaderboard-rank">
             #{playerRank}
           </span>
         )}
       </div>
 
-      <div className="space-y-1">
+      <div className="leaderboard-list">
         {entries.map((e, i) => {
-          const isPlayer = playerName && e.player_name.toLowerCase() === playerName.toLowerCase()
+          const isPlayer = Boolean(playerName && e.player_name.toLowerCase() === playerName.toLowerCase())
           const rankColor = i < 3 ? RANK_COLORS[i] : undefined
+          const medal = rankColor ? ['🥇', '🥈', '🥉'][i] : undefined
 
           return (
             <div
               key={e.id}
-              className={`
-                flex items-center gap-3 px-3 py-2 rounded-xl transition-all duration-200
-                ${isPlayer
-                  ? 'bg-cyan-500/10 ring-1 ring-cyan-400/30'
-                  : 'hover:bg-white/5'
-                }
-              `}
+              className={`leaderboard-row ${isPlayer ? 'is-player' : ''}`}
             >
               <span
-                className="text-xs font-bold w-6 text-center shrink-0"
-                style={rankColor ? { color: rankColor } : { color: 'rgba(255,255,255,0.3)' }}
+                className="leaderboard-position"
+                style={rankColor ? { color: rankColor } : undefined}
+                aria-label={medal ? `Rank ${i + 1}` : undefined}
               >
-                {rankColor && i < 3 ? ['🥇', '🥈', '🥉'][i] : `#${i + 1}`}
+                {medal ?? `#${i + 1}`}
               </span>
 
-              <div className="w-6 h-6 rounded-full shrink-0 relative flex items-center justify-center text-[10px] font-bold overflow-hidden border border-white/10"
+              <div className="leaderboard-avatar"
                 style={{ background: stringToColor(e.player_name) }}
               >
                 {e.avatar_url ? (
-                  <img src={e.avatar_url} alt="" className="w-full h-full object-cover relative z-10"
+                  <img
+                    src={e.avatar_url}
+                    alt=""
+                    loading="lazy"
+                    className=""
                     onError={e => { (e.currentTarget as HTMLImageElement).style.display = 'none' }}
                   />
                 ) : null}
-                <span className="absolute inset-0 flex items-center justify-center text-white/90">{e.player_name[0]?.toUpperCase() || '?'}</span>
+                <span>{e.player_name[0]?.toUpperCase() || '?'}</span>
               </div>
 
-              <span className="flex-1 text-sm text-white/70 truncate min-w-0">
+              <span className="leaderboard-name">
                 {e.player_name}
               </span>
 
-              <span className="text-sm font-bold text-cyan-300 shrink-0 tabular-nums">
+              <span className="leaderboard-score">
                 {e.score.toLocaleString()}
               </span>
             </div>

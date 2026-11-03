@@ -77,62 +77,58 @@ export const CropModal: React.FC<Props> = ({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4"
-      style={{ background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(8px)' }}
-    >
-      <div className="bg-[#1a1a2e]/90 backdrop-blur-xl rounded-2xl p-5 max-w-sm w-full shadow-2xl border border-white/10">
-        <h2 className="text-lg font-bold text-white text-center mb-1">Crop Your Photo</h2>
-        <p className="text-white/40 text-xs text-center mb-4">Position your face in the circle</p>
+    <div className="crop-overlay">
+      <div className="crop-dialog">
+        <p className="crop-overline">PHOTO BOOTH</p>
+        <h2 className="crop-title">Crop your photo</h2>
+        <p className="crop-description">Center yourself in the frame, then get back in the air.</p>
 
-        <div className="flex justify-center mb-4">
+        <div className="crop-preview">
           <canvas
             ref={canvasRef}
-            className="w-full max-w-[240px] aspect-square border-2 border-white/10 rounded-full"
+            className="crop-canvas"
           />
         </div>
 
-        <div className="space-y-3 mb-4">
+        <div className="crop-controls">
           {([['Left / Right', 'offsetX'], ['Up / Down', 'offsetY']] as const).map(([label, key]) => (
-            <div key={key}>
-              <label className="text-xs text-white/40 block mb-1">{label}</label>
+            <div className="crop-slider" key={key}>
+              <label>{label}</label>
               <input
                 type="range" min={-100} max={100}
                 value={state[key]}
                 onChange={e => setState(s => ({ ...s, [key]: +e.target.value }))}
-                className="w-full accent-cyan-400"
               />
             </div>
           ))}
-          <div>
-            <label className="text-xs text-white/40 block mb-1">Zoom</label>
-            <div className="flex gap-2 items-center">
+          <div className="crop-slider">
+            <label>Zoom</label>
+            <div className="zoom-control">
               <button
                 onClick={() => setState(s => ({ ...s, zoom: Math.max(0.5, s.zoom - 0.2) }))}
-                className="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 text-white font-bold text-sm transition"
               >−</button>
-              <span className="flex-1 text-center text-sm font-medium text-white/70">
+              <span>
                 {state.zoom.toFixed(1)}x
               </span>
               <button
                 onClick={() => setState(s => ({ ...s, zoom: Math.min(3, s.zoom + 0.2) }))}
-                className="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 text-white font-bold text-sm transition"
               >+</button>
             </div>
           </div>
         </div>
 
-        <div className="flex gap-2">
+        <div className="crop-actions">
           <button
             onClick={handleConfirm}
-            className="flex-1 bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-white font-bold py-2.5 rounded-xl text-sm transition-all duration-200 shadow-lg shadow-cyan-500/20"
+            className="crop-confirm"
           >
-            Use Photo
+            USE THIS PHOTO ↗
           </button>
           <button
             onClick={onCancel}
-            className="flex-1 bg-white/10 hover:bg-white/20 text-white/70 font-bold py-2.5 rounded-xl text-sm transition-all duration-200"
+            className="crop-cancel"
           >
-            Cancel
+            CANCEL
           </button>
         </div>
       </div>

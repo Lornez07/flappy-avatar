@@ -1,4 +1,13 @@
 let ctx: AudioContext | null = null
+let muted = false
+
+export function setMuted(next: boolean) {
+  muted = next
+}
+
+export function isMuted() {
+  return muted
+}
 
 function getCtx(): AudioContext {
   if (!ctx) ctx = new AudioContext()
@@ -6,8 +15,19 @@ function getCtx(): AudioContext {
   return ctx
 }
 
+/** Returns the audio context, or null when muted/unsupported so callers no-op. */
+function tryCtx(): AudioContext | null {
+  if (muted) return null
+  try {
+    return getCtx()
+  } catch {
+    return null // AudioContext unavailable (SSR, unsupported browser, autoplay policy)
+  }
+}
+
 export function playFlap() {
-  const c = getCtx()
+  const c = tryCtx()
+  if (!c) return
   const o = c.createOscillator()
   const g = c.createGain()
   o.type = 'sine'
@@ -20,7 +40,8 @@ export function playFlap() {
 }
 
 export function playScore() {
-  const c = getCtx()
+  const c = tryCtx()
+  if (!c) return
   const notes = [523, 659]
   notes.forEach((freq, i) => {
     const o = c.createOscillator()
@@ -36,7 +57,8 @@ export function playScore() {
 }
 
 export function playHit() {
-  const c = getCtx()
+  const c = tryCtx()
+  if (!c) return
   const o = c.createOscillator()
   const g = c.createGain()
   o.type = 'sawtooth'

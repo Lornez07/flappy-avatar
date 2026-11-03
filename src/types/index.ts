@@ -35,14 +35,14 @@ export const AVATAR_SKINS: AvatarSkin[] = [
 ]
 
 export const NEON_COLORS: NeonColor[] = [
-  { id: 'cyan', label: 'Cyan', glow: '#00f0ff', hex: '#00f0ff' },
-  { id: 'magenta', label: 'Magenta', glow: '#ff00e6', hex: '#ff00e6' },
-  { id: 'lime', label: 'Lime', glow: '#00ff66', hex: '#00ff66' },
-  { id: 'gold', label: 'Gold', glow: '#ffd700', hex: '#ffd700' },
-  { id: 'red', label: 'Red', glow: '#ff0044', hex: '#ff0044' },
-  { id: 'blue', label: 'Blue', glow: '#4488ff', hex: '#4488ff' },
-  { id: 'purple', label: 'Purple', glow: '#8800ff', hex: '#8800ff' },
-  { id: 'white', label: 'White', glow: '#ffffff', hex: '#ffffff' },
+  { id: 'cyan', label: 'Sky', glow: '#4a8f9b', hex: '#4a8f9b' },
+  { id: 'magenta', label: 'Berry', glow: '#bd5962', hex: '#bd5962' },
+  { id: 'lime', label: 'Clover', glow: '#66834f', hex: '#66834f' },
+  { id: 'gold', label: 'Sunshine', glow: '#d2a43d', hex: '#d2a43d' },
+  { id: 'red', label: 'Tomato', glow: '#d84c3f', hex: '#d84c3f' },
+  { id: 'blue', label: 'Cobalt', glow: '#536c9a', hex: '#536c9a' },
+  { id: 'purple', label: 'Grape', glow: '#80618b', hex: '#80618b' },
+  { id: 'white', label: 'Cream', glow: '#d5c6a5', hex: '#d5c6a5' },
 ]
 
 export interface AvatarConfig {
