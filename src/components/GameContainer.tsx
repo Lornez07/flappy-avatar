@@ -3,7 +3,7 @@ import { AvatarPicker } from './AvatarPicker'
 import { CropModal } from './CropModal'
 import { GameCanvas } from './GameCanvas'
 import { Leaderboard } from './Leaderboard'
-import { AvatarConfig, AVATAR_SKINS } from '../types'
+import { AvatarConfig, AVATAR_SKINS, NEON_COLORS } from '../types'
 import {
   submitScore,
   fetchPlayerBest,
@@ -11,6 +11,7 @@ import {
 } from '../lib/supabaseClient'
 import { sanitizePlayerName, MAX_NAME_LENGTH } from '../lib/validation'
 import { setMuted as setAudioMuted } from '../lib/audio'
+import { useLivePlayers } from '../hooks/useLivePlayers'
 
 function emojiToDataUrl(emoji: string): string {
   const c = document.createElement('canvas')
@@ -57,12 +58,21 @@ export const GameContainer: React.FC = () => {
   const [submitError, setSubmitError] = useState<string | null>(null)
   const [submitted, setSubmitted] = useState(false)
   const [showFlightReport, setShowFlightReport] = useState(false)
+  const [isPlaying, setIsPlaying] = useState(false)
   const [restartToken, setRestartToken] = useState(0)
   const [muted, setMuted] = useState(() => {
     try { return localStorage.getItem('flappyAvatar_muted') === '1' } catch { return false }
   })
 
   const originalImageRef = useRef<HTMLImageElement | null>(null)
+
+  const selectedSkin = AVATAR_SKINS.find(skin => skin.id === avatarConfig.skinId) ?? AVATAR_SKINS[0]
+  const selectedColor = NEON_COLORS.find(color => color.id === avatarConfig.neonColorId) ?? NEON_COLORS[0]
+  const { remotePlayers, connected, connectionError, reportPosition } = useLivePlayers(
+    isPlaying,
+    selectedSkin.emoji,
+    selectedColor.id,
+  )
 
   useEffect(() => { setAudioMuted(muted) }, [muted])
 
@@ -97,6 +107,7 @@ export const GameContainer: React.FC = () => {
   const handleCropCancel = useCallback(() => setShowCrop(false), [])
 
   const handleScore = useCallback((s: number) => setScore(s), [])
+  const handlePlayingChange = useCallback((playing: boolean) => setIsPlaying(playing), [])
 
   const handleGameOver = useCallback((finalScore: number) => {
     setScore(finalScore)
@@ -115,6 +126,7 @@ export const GameContainer: React.FC = () => {
   }, [])
 
   const handleRestart = useCallback(() => {
+    setIsPlaying(false)
     setRestartToken(token => token + 1)
     setShowFlightReport(false)
     setSubmitError(null)
@@ -147,6 +159,13 @@ export const GameContainer: React.FC = () => {
 
   const showPhoto = avatarConfig.type === 'photo' && photoImage
   const isNewBest = score >= highScore && score > 0
+  const livePlayerStatus = !isSupabaseConfigured
+    ? 'LIVE OFF'
+    : connected
+      ? `LIVE PILOTS ${remotePlayers.length >= 4 ? '4+' : remotePlayers.length + 1}`
+      : isPlaying
+        ? connectionError ? 'LIVE OFFLINE' : 'CONNECTING'
+        : 'LIVE ARCADE'
 
   return (
     <div className="poster-page">
@@ -193,7 +212,13 @@ export const GameContainer: React.FC = () => {
             <div className="game-cabinet">
               <div className="cabinet-topline">
                 <span><i className="live-dot" /> INSERT AVATAR</span>
-                <span>SOLO RUN / 01</span>
+                <span
+                  className={`live-player-status${connected ? ' is-connected' : ''}`}
+                  aria-live="polite"
+                  title={isSupabaseConfigured ? 'Live player sharing uses Supabase Realtime' : 'Set up Supabase to enable live players'}
+                >
+                  {livePlayerStatus}
+                </span>
               </div>
               <div className="game-canvas-frame">
                 <GameCanvas
@@ -201,8 +226,11 @@ export const GameContainer: React.FC = () => {
                   photoImage={showPhoto ? photoImage : null}
                   onScore={handleScore}
                   onGameOver={handleGameOver}
+                  onPlayingChange={handlePlayingChange}
+                  onPlayerState={reportPosition}
                   highScore={highScore}
                   restartToken={restartToken}
+                  remotePlayers={remotePlayers}
                 />
                 {showFlightReport && (
                   <div className="flight-report-overlay">
@@ -299,7 +327,7 @@ export const GameContainer: React.FC = () => {
                 <div className="avatar-preview" aria-label="Selected avatar">
                   {showPhoto
                     ? <img src={photoImage.src} alt="Your selected photo avatar" />
-                    : <span>{AVATAR_SKINS.find(s => s.id === avatarConfig.skinId)?.emoji ?? AVATAR_SKINS[0].emoji}</span>}
+                    : <span>{selectedSkin.emoji}</span>}
                 </div>
               </div>
               <AvatarPicker
@@ -307,6 +335,9 @@ export const GameContainer: React.FC = () => {
                 onChange={handleConfigChange}
                 onUploadClick={() => document.getElementById('avatar-upload-input')?.click()}
               />
+              <p className="live-privacy-note">
+                Live play shares an emoji avatar, badge color, score, and approximate flight position with other active players. Photos and names stay on this device.
+              </p>
               <input
                 id="avatar-upload-input"
                 type="file"

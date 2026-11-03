@@ -2,16 +2,21 @@ import React, { useEffect, useRef } from 'react'
 import { PlayerPhysics, PhysicsConfig, Pipe, PipeConfig, AvatarConfig, AVATAR_SKINS, NEON_COLORS } from '../types'
 import { playFlap, playScore, playHit } from '../lib/audio'
 import { frameDelta, hasClearedPipe, hitsPipe, randomGap } from '../lib/gameLogic'
+import { LivePlayer, LocalPlayerState } from '../lib/livePlayers'
 
 interface Props {
   avatarConfig: AvatarConfig
   photoImage: HTMLImageElement | null
   onScore: (s: number) => void
   onGameOver: (s: number) => void
+  onPlayingChange: (playing: boolean) => void
+  onPlayerState: (state: LocalPlayerState) => void
   highScore: number
   restartToken: number
+  remotePlayers: LivePlayer[]
 }
 
+const LIVE_PLAYER_UPDATE_MS = 250
 const PHYSICS: PhysicsConfig = {
   gravity: 0.45, flapStrength: -9.5, maxVelocity: 12,
   rotationFlap: -18, rotationMax: 65, rotationLerpSpeed: 0.08,
@@ -36,10 +41,13 @@ type Screen = 'MENU' | 'PLAYING' | 'GAME_OVER'
 
 export const GameCanvas: React.FC<Props> = ({
   avatarConfig, photoImage,
-  onScore, onGameOver, highScore, restartToken,
+  onScore, onGameOver, onPlayingChange, onPlayerState, highScore, restartToken, remotePlayers,
 }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const lastRestartToken = useRef(restartToken)
+  const remotePlayersRef = useRef(remotePlayers)
+  const remoteYRef = useRef(new Map<string, number>())
+  remotePlayersRef.current = remotePlayers
 
   const screen = useRef<Screen>('MENU')
   const p = useRef<PlayerPhysics>({
@@ -88,11 +96,13 @@ export const GameCanvas: React.FC<Props> = ({
     if (lastRestartToken.current !== restartToken) {
       reset()
       lastRestartToken.current = restartToken
+      onPlayingChange(false)
     }
 
     function onInput() {
       if (screen.current === 'MENU') {
         screen.current = 'PLAYING'
+        onPlayingChange(true)
         pipeTimer.current = PIPE.spacing - 50
         const pl = p.current
         pl.velocityY = PHYSICS.flapStrength
@@ -142,6 +152,7 @@ export const GameCanvas: React.FC<Props> = ({
       if (pl.y + pl.height / 2 > H - GROUND_H || pl.y - pl.height / 2 < 0) {
         playHit()
         screen.current = 'GAME_OVER'
+        onPlayingChange(false)
         const fs = score.current
         best.current = Math.max(best.current, fs)
         onGameOver(fs)
@@ -166,6 +177,7 @@ export const GameCanvas: React.FC<Props> = ({
         if (hitsPipe(pl, pipe, H - GROUND_H)) {
           playHit()
           screen.current = 'GAME_OVER'
+          onPlayingChange(false)
           const fs = score.current
           best.current = Math.max(best.current, fs)
           onGameOver(fs)
@@ -191,6 +203,12 @@ export const GameCanvas: React.FC<Props> = ({
       ground(ctx, groundOff.current)
 
       drawAvatar(ctx, pl, avatarSkin, avatarConfig.type === 'photo', photoImage, neonColor, neonPulse.current)
+      drawRemotePlayers(
+        ctx,
+        remotePlayersRef.current,
+        remoteYRef.current,
+        neonPulse.current,
+      )
 
       particles.current.forEach(pt => {
         ctx.globalAlpha = pt.life * 0.6
@@ -207,10 +225,17 @@ export const GameCanvas: React.FC<Props> = ({
 
     let raf: number
     let lastTime = performance.now()
+    let lastLiveUpdateAt = 0
     function loop(now: number) {
       const dt = frameDelta(now - lastTime, TARGET_FRAME_MS, MAX_DT)
       lastTime = now
-      tick(dt); render(); raf = requestAnimationFrame(loop)
+      tick(dt)
+      if (screen.current === 'PLAYING' && now - lastLiveUpdateAt >= LIVE_PLAYER_UPDATE_MS) {
+        lastLiveUpdateAt = now
+        onPlayerState({ y: p.current.y / H, score: score.current })
+      }
+      render()
+      raf = requestAnimationFrame(loop)
     }
     raf = requestAnimationFrame(loop)
 
@@ -220,7 +245,7 @@ export const GameCanvas: React.FC<Props> = ({
       cancelAnimationFrame(raf)
       clean.forEach(fn => fn())
     }
-  }, [avatarConfig, photoImage, onScore, onGameOver, restartToken])
+  }, [avatarConfig, photoImage, onScore, onGameOver, onPlayingChange, onPlayerState, restartToken])
 
   return (
     <div className="w-full max-w-[400px] mx-auto select-none" style={{ WebkitUserSelect: 'none', userSelect: 'none' }}>
@@ -233,6 +258,79 @@ export const GameCanvas: React.FC<Props> = ({
       />
     </div>
   )
+}
+
+function drawRemotePlayers(
+  ctx: CanvasRenderingContext2D,
+  players: LivePlayer[],
+  displayedY: Map<string, number>,
+  pulse: number,
+) {
+  const activeIds = new Set(players.map(player => player.id))
+  for (const id of displayedY.keys()) {
+    if (!activeIds.has(id)) displayedY.delete(id)
+  }
+
+  players.forEach((player, index) => {
+    const color = NEON_COLORS.find(candidate => candidate.id === player.colorId) ?? NEON_COLORS[0]
+    const targetY = Math.max(
+      AVATAR_R + 28,
+      Math.min(H - GROUND_H - AVATAR_R - 8, player.y * H),
+    )
+    const currentY = displayedY.get(player.id) ?? targetY
+    const y = currentY + (targetY - currentY) * 0.18
+    displayedY.set(player.id, y)
+
+    drawRemoteAvatar(
+      ctx,
+      player,
+      PLAYER_X + 50 + index * 48,
+      y,
+      color.hex,
+      pulse + index,
+    )
+  })
+}
+
+function drawRemoteAvatar(
+  ctx: CanvasRenderingContext2D,
+  player: LivePlayer,
+  x: number,
+  y: number,
+  color: string,
+  pulse: number,
+) {
+  ctx.save()
+  ctx.globalAlpha = 0.78
+  ctx.shadowColor = color
+  ctx.shadowBlur = 4 + Math.sin(pulse * 2) * 2
+  ctx.beginPath()
+  ctx.arc(x, y, AVATAR_R + 2, 0, Math.PI * 2)
+  ctx.fillStyle = '#fffaf0'
+  ctx.fill()
+  ctx.shadowBlur = 0
+  ctx.beginPath()
+  ctx.arc(x, y, AVATAR_R, 0, Math.PI * 2)
+  ctx.fillStyle = color
+  ctx.fill()
+  ctx.font = `${AVATAR_R * 1.1}px serif`
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'middle'
+  ctx.fillStyle = '#fff'
+  ctx.fillText(player.avatarEmoji, x, y + 1)
+  ctx.strokeStyle = '#25231f'
+  ctx.lineWidth = 2
+  ctx.stroke()
+
+  const scoreText = String(player.score)
+  ctx.font = 'bold 9px "Trebuchet MS", Arial, sans-serif'
+  const tagWidth = Math.max(22, ctx.measureText(scoreText).width + 8)
+  roundRect(ctx, x - tagWidth / 2, y - AVATAR_R - 14, tagWidth, 13, 3)
+  ctx.fillStyle = '#25231f'
+  ctx.fill()
+  ctx.fillStyle = '#fffaf0'
+  ctx.fillText(scoreText, x, y - AVATAR_R - 7)
+  ctx.restore()
 }
 
 function sky(ctx: CanvasRenderingContext2D) {

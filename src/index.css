@@ -300,6 +300,28 @@ input:focus-visible {
   box-shadow: 0 0 0 3px rgba(242, 200, 75, 0.14);
 }
 
+.live-player-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: #d3cbbb;
+  font-size: 7px;
+  white-space: nowrap;
+}
+
+.live-player-status::before {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #827a6c;
+  content: "";
+}
+
+.live-player-status.is-connected::before {
+  background: #9dc783;
+  box-shadow: 0 0 0 3px rgba(157, 199, 131, 0.14);
+}
+
 .cabinet-bottomline {
   min-height: 27px;
   padding-top: 3px;
@@ -562,6 +584,13 @@ input:focus-visible {
 
 .avatar-preview span {
   font-size: 31px;
+}
+
+.live-privacy-note {
+  margin: 11px 0 0;
+  color: var(--ink-soft);
+  font-size: 9px;
+  line-height: 1.45;
 }
 
 .avatar-picker {

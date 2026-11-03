@@ -28,7 +28,7 @@ export const NOT_CONFIGURED_ERROR =
 
 let client: SupabaseClient | null = null;
 
-function getSupabase(): SupabaseClient | null {
+export function getSupabaseClient(): SupabaseClient | null {
   if (!isSupabaseConfigured) {
     console.warn('Supabase credentials not configured. Leaderboard features disabled.');
     return null;
@@ -54,7 +54,7 @@ export async function submitScore(
   score: number,
   avatarUrl?: string
 ): Promise<{ success: boolean; error?: string }> {
-  const supabase = getSupabase();
+  const supabase = getSupabaseClient();
   if (!supabase) return { success: false, error: NOT_CONFIGURED_ERROR };
 
   const name = sanitizePlayerName(playerName);
@@ -100,7 +100,7 @@ export async function submitScore(
 export async function fetchLeaderboard(
   limit: number = 10
 ): Promise<LeaderboardResponse> {
-  const supabase = getSupabase();
+  const supabase = getSupabaseClient();
   if (!supabase) return { data: [], error: NOT_CONFIGURED_ERROR };
 
   try {
@@ -135,7 +135,7 @@ export async function fetchLeaderboard(
 export async function fetchPlayerBest(
   playerName: string
 ): Promise<LeaderboardEntry | null> {
-  const supabase = getSupabase();
+  const supabase = getSupabaseClient();
   if (!supabase) return null;
 
   const name = sanitizePlayerName(playerName);
@@ -180,7 +180,7 @@ export async function fetchLeaderboardWithPlayerRank(
   playerRecord: LeaderboardEntry | null;
   error?: string;
 }> {
-  const supabase = getSupabase();
+  const supabase = getSupabaseClient();
   if (!supabase) {
     return {
       leaderboard: [],

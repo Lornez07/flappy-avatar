@@ -38,6 +38,8 @@ Without Supabase credentials the game still runs — the leaderboard degrades to
 
 No storage bucket is needed — avatars are stored as small inline data URLs
 (capped at 64 KB by a database constraint) alongside the score.
+Live players use Supabase Realtime Broadcast; it is enabled by default and
+requires no additional table or SQL migration.
 
 > Never put a `service_role` key in `.env.local`. Anything prefixed `VITE_` is
 > bundled into the client and is public. Row Level Security is what protects the
@@ -67,8 +69,11 @@ src/
 │   ├── CropModal.tsx        # Circular photo cropper with pan/zoom
 │   ├── AvatarPicker.tsx     # Emoji skin + neon colour picker
 │   └── Leaderboard.tsx      # Top scores with player-rank highlighting
+├── hooks/
+│   └── useLivePlayers.ts    # Global, transient Realtime player updates
 ├── lib/
 │   ├── gameLogic.ts         # Pure collision/scoring/timing helpers (tested)
+│   ├── livePlayers.ts       # Validation for untrusted live-player broadcasts
 │   ├── validation.ts        # Name and score sanitisation (tested)
 │   ├── supabaseClient.ts    # Lazily-created client + leaderboard queries
 │   └── audio.ts             # Web Audio SFX with mute support
@@ -81,6 +86,10 @@ Design notes:
   accents, and tactile cards give the game a distinct visual identity.
 - **Immediate score entry.** The flight report appears over the game on
   game-over; player setup and the leaderboard stay available beside it.
+- **Global live arcade.** While a run is active, Realtime broadcasts the
+  player's emoji, badge color, score, and approximate vertical position to
+  other active players. Names and uploaded photos are never broadcast, and
+  live state is not stored in the database.
 - **Separation of concerns.** Anything that can be a pure function lives in
   `lib/gameLogic.ts` and is unit-tested; `GameCanvas.tsx` owns only the canvas
   lifecycle, mutable refs, and drawing.
@@ -98,6 +107,9 @@ Design notes:
   a determined player can POST any score to the REST API. This is inherent to an
   anonymous, serverless leaderboard. If scores ever carry stakes, move validation
   into an Edge Function and require authentication.
+- **Live player states are cosmetic and untrusted.** The global Realtime channel
+  is public; a modified client can spoof its avatar or position. Updates are
+  ephemeral and never affect another player's game physics or leaderboard.
 - **Collision runs against the pipe shaft only**, not the wider cap the renderer
   draws. A near-miss on the cap lip can look like it should have counted.
 - **No end-to-end tests.** Unit tests cover the pure logic; the rendering and
