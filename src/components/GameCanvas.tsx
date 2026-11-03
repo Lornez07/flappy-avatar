@@ -8,8 +8,8 @@ interface Props {
   photoImage: HTMLImageElement | null
   onScore: (s: number) => void
   onGameOver: (s: number) => void
-  onRestart: () => void
   highScore: number
+  restartToken: number
 }
 
 const PHYSICS: PhysicsConfig = {
@@ -36,9 +36,10 @@ type Screen = 'MENU' | 'PLAYING' | 'GAME_OVER'
 
 export const GameCanvas: React.FC<Props> = ({
   avatarConfig, photoImage,
-  onScore, onGameOver, onRestart, highScore,
+  onScore, onGameOver, highScore, restartToken,
 }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null)
+  const lastRestartToken = useRef(restartToken)
 
   const screen = useRef<Screen>('MENU')
   const p = useRef<PlayerPhysics>({
@@ -84,6 +85,11 @@ export const GameCanvas: React.FC<Props> = ({
       particles.current = []; screen.current = 'MENU'
     }
 
+    if (lastRestartToken.current !== restartToken) {
+      reset()
+      lastRestartToken.current = restartToken
+    }
+
     function onInput() {
       if (screen.current === 'MENU') {
         screen.current = 'PLAYING'
@@ -94,7 +100,7 @@ export const GameCanvas: React.FC<Props> = ({
         return
       }
       if (screen.current === 'GAME_OVER') {
-        reset(); onRestart(); return
+        return
       }
       if (screen.current === 'PLAYING') {
         const pl = p.current
@@ -214,14 +220,14 @@ export const GameCanvas: React.FC<Props> = ({
       cancelAnimationFrame(raf)
       clean.forEach(fn => fn())
     }
-  }, [avatarConfig, photoImage, onScore, onGameOver, onRestart])
+  }, [avatarConfig, photoImage, onScore, onGameOver, restartToken])
 
   return (
     <div className="w-full max-w-[400px] mx-auto select-none" style={{ WebkitUserSelect: 'none', userSelect: 'none' }}>
       <canvas
         ref={canvasRef}
         role="application"
-        aria-label="Flappy Avatar game. Press Space, tap, or click to flap."
+        aria-label="Flappy Avatar game. Press Space, tap, or click to flap. After game over, use the Play Again button."
         tabIndex={0}
         className="game-canvas w-full aspect-[2/3] cursor-pointer touch-none focus:outline-none"
       />
@@ -515,7 +521,7 @@ function drawGameOver(ctx: CanvasRenderingContext2D, score: number, best: number
     ctx.textBaseline = 'middle'
     ctx.font = 'bold 12px "Trebuchet MS", Arial, sans-serif'
     ctx.fillStyle = '#b83b32'
-    ctx.fillText('TAP ANYWHERE TO GO AGAIN', W / 2, H / 2 - GROUND_H / 2 + 70)
+    ctx.fillText('USE PLAY AGAIN BELOW', W / 2, H / 2 - GROUND_H / 2 + 70)
     ctx.shadowBlur = 0
   }
 }

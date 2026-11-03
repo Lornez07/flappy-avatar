@@ -57,13 +57,26 @@ export const GameContainer: React.FC = () => {
   const [submitError, setSubmitError] = useState<string | null>(null)
   const [submitted, setSubmitted] = useState(false)
   const [showSubmit, setShowSubmit] = useState(false)
+  const [restartToken, setRestartToken] = useState(0)
   const [muted, setMuted] = useState(() => {
     try { return localStorage.getItem('flappyAvatar_muted') === '1' } catch { return false }
   })
 
   const originalImageRef = useRef<HTMLImageElement | null>(null)
+  const playerNameInputRef = useRef<HTMLInputElement | null>(null)
 
   useEffect(() => { setAudioMuted(muted) }, [muted])
+
+  useEffect(() => {
+    if (!showSubmit) return
+    const frame = requestAnimationFrame(() => {
+      playerNameInputRef.current?.scrollIntoView({
+        behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth',
+        block: 'center',
+      })
+    })
+    return () => cancelAnimationFrame(frame)
+  }, [showSubmit])
 
   const toggleMute = useCallback(() => {
     setMuted(prev => {
@@ -114,6 +127,7 @@ export const GameContainer: React.FC = () => {
   }, [])
 
   const handleRestart = useCallback(() => {
+    setRestartToken(token => token + 1)
     setShowSubmit(false)
     setSubmitError(null)
     setSubmitted(false)
@@ -199,8 +213,8 @@ export const GameContainer: React.FC = () => {
                   photoImage={showPhoto ? photoImage : null}
                   onScore={handleScore}
                   onGameOver={handleGameOver}
-                  onRestart={handleRestart}
                   highScore={highScore}
+                  restartToken={restartToken}
                 />
               </div>
               <div className="cabinet-bottomline">
@@ -293,6 +307,7 @@ export const GameContainer: React.FC = () => {
                     <label htmlFor="player-name">Put your name on the board</label>
                     <div className="submit-row">
                       <input
+                        ref={playerNameInputRef}
                         id="player-name"
                         type="text"
                         placeholder="Your name"
@@ -316,6 +331,15 @@ export const GameContainer: React.FC = () => {
                 ) : (
                   <p className="submit-success" role="status">✦ Score submitted. You're on the board!</p>
                 )}
+
+                <button
+                  type="button"
+                  onClick={handleRestart}
+                  disabled={submitting}
+                  className="restart-button"
+                >
+                  PLAY AGAIN <span aria-hidden="true">↗</span>
+                </button>
 
                 <div className="leaderboard-block">
                   <Leaderboard playerName={playerName} limit={5} />

@@ -979,6 +979,46 @@ input:focus-visible {
   font-weight: 800;
 }
 
+.restart-button {
+  display: flex;
+  width: 100%;
+  min-height: 42px;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 11px;
+  padding: 0 12px;
+  border: 1.5px solid var(--ink);
+  border-radius: 3px;
+  background: var(--paper-light);
+  box-shadow: 2px 2px 0 var(--ink);
+  color: var(--ink);
+  cursor: pointer;
+  font-size: 9px;
+  font-weight: 900;
+  letter-spacing: 0.1em;
+  transition: transform 120ms ease, box-shadow 120ms ease;
+}
+
+.restart-button span {
+  color: var(--tomato);
+  font-size: 15px;
+}
+
+.restart-button:hover:not(:disabled) {
+  transform: translate(-1px, -1px);
+  box-shadow: 3px 3px 0 var(--ink);
+}
+
+.restart-button:active:not(:disabled) {
+  transform: translate(2px, 2px);
+  box-shadow: none;
+}
+
+.restart-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.48;
+}
+
 .leaderboard-block {
   margin-top: 15px;
   padding-top: 14px;
