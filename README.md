@@ -79,6 +79,8 @@ Design notes:
 
 - **Arcade-poster presentation.** Warm paper, ink-heavy typography, tomato-red
   accents, and tactile cards give the game a distinct visual identity.
+- **Immediate score entry.** The flight report appears over the game on
+  game-over; player setup and the leaderboard stay available beside it.
 - **Separation of concerns.** Anything that can be a pure function lives in
   `lib/gameLogic.ts` and is unit-tested; `GameCanvas.tsx` owns only the canvas
   lifecycle, mutable refs, and drawing.

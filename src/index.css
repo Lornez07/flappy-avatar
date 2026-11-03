@@ -314,6 +314,8 @@ input:focus-visible {
 }
 
 .game-canvas-frame {
+  position: relative;
+  isolation: isolate;
   overflow: hidden;
   width: 100%;
   max-width: 400px;
@@ -330,6 +332,107 @@ input:focus-visible {
   aspect-ratio: 2 / 3;
   border-radius: 0;
   box-shadow: none;
+}
+
+.flight-report-overlay {
+  position: absolute;
+  z-index: 2;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  overflow: auto;
+  padding: 9px;
+  background: rgba(37, 35, 31, 0.38);
+  overscroll-behavior: contain;
+  touch-action: pan-y;
+}
+
+.flight-report-card {
+  width: min(100%, 340px);
+  max-height: 100%;
+  min-height: 0;
+  overflow-y: auto;
+  padding: clamp(12px, 4vw, 19px);
+  border: 1.5px solid var(--ink);
+  border-radius: 4px;
+  background: var(--paper-light);
+  box-shadow: 4px 4px 0 var(--ink);
+}
+
+.flight-report-card .card-overline {
+  margin-bottom: 10px;
+}
+
+.flight-report-card .result-heading {
+  margin-bottom: 10px;
+}
+
+.flight-report-card .result-heading h2 {
+  font-size: clamp(23px, 7vw, 30px);
+}
+
+.flight-report-card .result-heading p {
+  margin: 5px 0 0;
+  color: var(--ink-soft);
+  font-size: 10px;
+  line-height: 1.35;
+}
+
+.flight-report-card .new-best-sticker {
+  width: 43px;
+  height: 43px;
+  font-size: 9px;
+}
+
+.flight-report-card .scoreboard {
+  margin-bottom: 10px;
+}
+
+.flight-report-card .scoreboard > div {
+  gap: 4px;
+  padding: 8px;
+}
+
+.flight-report-card .scoreboard > div > span {
+  font-size: 7px;
+  letter-spacing: 0.06em;
+}
+
+.flight-report-card .scoreboard strong {
+  font-size: 25px;
+}
+
+.flight-report-card .submit-block {
+  gap: 6px;
+}
+
+.flight-report-card .submit-block > label {
+  font-size: 8px;
+  letter-spacing: 0.08em;
+}
+
+.flight-report-card .submit-row {
+  gap: 6px;
+}
+
+.flight-report-card .submit-row input {
+  padding: 9px 8px;
+  font-size: 11px;
+}
+
+.flight-report-card .submit-button {
+  padding: 0 8px;
+  font-size: 8px;
+}
+
+.flight-report-card .restart-button {
+  min-height: 36px;
+  margin-top: 8px;
+}
+
+.flight-report-card .submit-success {
+  padding: 8px;
+  font-size: 10px;
 }
 
 .play-tip {
@@ -835,10 +938,6 @@ input:focus-visible {
   color: var(--ink);
 }
 
-.results-card {
-  padding-bottom: 16px;
-}
-
 .result-heading {
   align-items: center;
   margin-bottom: 15px;
@@ -1017,12 +1116,6 @@ input:focus-visible {
 .restart-button:disabled {
   cursor: not-allowed;
   opacity: 0.48;
-}
-
-.leaderboard-block {
-  margin-top: 15px;
-  padding-top: 14px;
-  border-top: 1px dashed #c9beab;
 }
 
 .poster-footer {

@@ -56,27 +56,15 @@ export const GameContainer: React.FC = () => {
   const [submitting, setSubmitting] = useState(false)
   const [submitError, setSubmitError] = useState<string | null>(null)
   const [submitted, setSubmitted] = useState(false)
-  const [showSubmit, setShowSubmit] = useState(false)
+  const [showFlightReport, setShowFlightReport] = useState(false)
   const [restartToken, setRestartToken] = useState(0)
   const [muted, setMuted] = useState(() => {
     try { return localStorage.getItem('flappyAvatar_muted') === '1' } catch { return false }
   })
 
   const originalImageRef = useRef<HTMLImageElement | null>(null)
-  const playerNameInputRef = useRef<HTMLInputElement | null>(null)
 
   useEffect(() => { setAudioMuted(muted) }, [muted])
-
-  useEffect(() => {
-    if (!showSubmit) return
-    const frame = requestAnimationFrame(() => {
-      playerNameInputRef.current?.scrollIntoView({
-        behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth',
-        block: 'center',
-      })
-    })
-    return () => cancelAnimationFrame(frame)
-  }, [showSubmit])
 
   const toggleMute = useCallback(() => {
     setMuted(prev => {
@@ -123,12 +111,12 @@ export const GameContainer: React.FC = () => {
     })
     setSubmitted(false)
     setSubmitError(null)
-    setShowSubmit(true)
+    setShowFlightReport(true)
   }, [])
 
   const handleRestart = useCallback(() => {
     setRestartToken(token => token + 1)
-    setShowSubmit(false)
+    setShowFlightReport(false)
     setSubmitError(null)
     setSubmitted(false)
   }, [])
@@ -216,6 +204,74 @@ export const GameContainer: React.FC = () => {
                   highScore={highScore}
                   restartToken={restartToken}
                 />
+                {showFlightReport && (
+                  <div className="flight-report-overlay">
+                    <section
+                      className="flight-report-card"
+                      role="region"
+                      aria-labelledby="flight-report-title"
+                      aria-live="polite"
+                    >
+                      <div className="card-overline"><span>03</span> FLIGHT REPORT</div>
+                      <div className="result-heading">
+                        <div>
+                          <h2 id="flight-report-title">Flight's over.</h2>
+                          <p>Every bonk is a new beginning.</p>
+                        </div>
+                        {isNewBest && <span className="new-best-sticker">NEW<br />BEST!</span>}
+                      </div>
+
+                      <div className="scoreboard">
+                        <div><span>THIS FLIGHT</span><strong>{score.toString().padStart(2, '0')}</strong></div>
+                        <div><span>PERSONAL BEST</span><strong>{highScore.toString().padStart(2, '0')}</strong></div>
+                      </div>
+
+                      {!submitted ? (
+                        <form
+                          className="submit-block"
+                          onSubmit={event => {
+                            event.preventDefault()
+                            void handleSubmitScore()
+                          }}
+                        >
+                          <label htmlFor="player-name">Put your name on the board</label>
+                          <div className="submit-row">
+                            <input
+                              id="player-name"
+                              type="text"
+                              placeholder="Your name"
+                              maxLength={MAX_NAME_LENGTH}
+                              value={playerName}
+                              onChange={event => setPlayerName(event.target.value)}
+                            />
+                            <button
+                              type="submit"
+                              disabled={submitting || !isSupabaseConfigured}
+                              className="submit-button"
+                            >
+                              {submitting ? 'SENDING…' : 'SUBMIT ↗'}
+                            </button>
+                          </div>
+                          {!isSupabaseConfigured && (
+                            <p className="service-note">Leaderboard unavailable — Supabase is not configured.</p>
+                          )}
+                          {submitError && <p className="form-error" role="alert">{submitError}</p>}
+                        </form>
+                      ) : (
+                        <p className="submit-success" role="status">✦ Score submitted. You're on the board!</p>
+                      )}
+
+                      <button
+                        type="button"
+                        onClick={handleRestart}
+                        disabled={submitting}
+                        className="restart-button"
+                      >
+                        PLAY AGAIN <span aria-hidden="true">↗</span>
+                      </button>
+                    </section>
+                  </div>
+                )}
               </div>
               <div className="cabinet-bottomline">
                 <span>FLAP</span><span className="cabinet-dashes" /><span>DON'T BONK</span>
@@ -233,119 +289,59 @@ export const GameContainer: React.FC = () => {
           </section>
 
           <aside className="details-column">
-            {!showSubmit ? (
-              <>
-                <section className="poster-card customize-card">
-                  <div className="card-overline"><span>02</span> PLAYER SETUP</div>
-                  <div className="customize-heading">
-                    <div>
-                      <h2>Make it yours.</h2>
-                      <p>Every great flight needs a co-pilot.</p>
-                    </div>
-                    <div className="avatar-preview" aria-label="Selected avatar">
-                      {showPhoto
-                        ? <img src={photoImage.src} alt="Your selected photo avatar" />
-                        : <span>{AVATAR_SKINS.find(s => s.id === avatarConfig.skinId)?.emoji ?? AVATAR_SKINS[0].emoji}</span>}
-                    </div>
-                  </div>
-                  <AvatarPicker
-                    config={avatarConfig}
-                    onChange={handleConfigChange}
-                    onUploadClick={() => document.getElementById('avatar-upload-input')?.click()}
-                  />
-                  <input
-                    id="avatar-upload-input"
-                    type="file"
-                    accept="image/*"
-                    className="visually-hidden"
-                    onChange={e => {
-                      const file = e.target.files?.[0]
-                      if (!file) return
-                      const reader = new FileReader()
-                      reader.onload = ev => {
-                        const img = new Image()
-                        img.onload = () => handleImageSelected(img)
-                        img.src = ev.target?.result as string
-                      }
-                      reader.readAsDataURL(file)
-                      e.currentTarget.value = ''
-                    }}
-                  />
-                </section>
-
-                <section className="best-score-card" aria-label="Personal best">
-                  <div className="best-score-copy">
-                    <span>YOUR PERSONAL BEST</span>
-                    <strong>{highScore.toString().padStart(2, '0')}</strong>
-                  </div>
-                  <span className="best-score-star" aria-hidden="true">★</span>
-                </section>
-
-                <div className="side-note">
-                  <span className="side-note-mark" aria-hidden="true">!</span>
-                  <p><strong>Quick tip</strong> The gaps get tighter. Tiny taps beat panic flaps.</p>
+            <section className="poster-card customize-card">
+              <div className="card-overline"><span>02</span> PLAYER SETUP</div>
+              <div className="customize-heading">
+                <div>
+                  <h2>Make it yours.</h2>
+                  <p>Every great flight needs a co-pilot.</p>
                 </div>
-              </>
-            ) : (
-              <section className="poster-card results-card">
-                <div className="card-overline"><span>03</span> FLIGHT REPORT</div>
-                <div className="result-heading">
-                  <div>
-                    <h2>Nice flight.</h2>
-                    <p>Every bonk is a new beginning.</p>
-                  </div>
-                  {isNewBest && <span className="new-best-sticker">NEW<br />BEST!</span>}
+                <div className="avatar-preview" aria-label="Selected avatar">
+                  {showPhoto
+                    ? <img src={photoImage.src} alt="Your selected photo avatar" />
+                    : <span>{AVATAR_SKINS.find(s => s.id === avatarConfig.skinId)?.emoji ?? AVATAR_SKINS[0].emoji}</span>}
                 </div>
+              </div>
+              <AvatarPicker
+                config={avatarConfig}
+                onChange={handleConfigChange}
+                onUploadClick={() => document.getElementById('avatar-upload-input')?.click()}
+              />
+              <input
+                id="avatar-upload-input"
+                type="file"
+                accept="image/*"
+                className="visually-hidden"
+                onChange={e => {
+                  const file = e.target.files?.[0]
+                  if (!file) return
+                  const reader = new FileReader()
+                  reader.onload = ev => {
+                    const img = new Image()
+                    img.onload = () => handleImageSelected(img)
+                    img.src = ev.target?.result as string
+                  }
+                  reader.readAsDataURL(file)
+                  e.currentTarget.value = ''
+                }}
+              />
+            </section>
 
-                <div className="scoreboard">
-                  <div><span>THIS FLIGHT</span><strong>{score.toString().padStart(2, '0')}</strong></div>
-                  <div><span>PERSONAL BEST</span><strong>{highScore.toString().padStart(2, '0')}</strong></div>
-                </div>
+            <section className="best-score-card" aria-label="Personal best">
+              <div className="best-score-copy">
+                <span>YOUR PERSONAL BEST</span>
+                <strong>{highScore.toString().padStart(2, '0')}</strong>
+              </div>
+              <span className="best-score-star" aria-hidden="true">★</span>
+            </section>
 
-                {!submitted ? (
-                  <div className="submit-block">
-                    <label htmlFor="player-name">Put your name on the board</label>
-                    <div className="submit-row">
-                      <input
-                        ref={playerNameInputRef}
-                        id="player-name"
-                        type="text"
-                        placeholder="Your name"
-                        maxLength={MAX_NAME_LENGTH}
-                        value={playerName}
-                        onChange={e => setPlayerName(e.target.value)}
-                      />
-                      <button
-                        onClick={handleSubmitScore}
-                        disabled={submitting || !isSupabaseConfigured}
-                        className="submit-button"
-                      >
-                        {submitting ? 'SENDING…' : 'SUBMIT ↗'}
-                      </button>
-                    </div>
-                    {!isSupabaseConfigured && (
-                      <p className="service-note">Leaderboard unavailable — Supabase is not configured.</p>
-                    )}
-                    {submitError && <p className="form-error" role="alert">{submitError}</p>}
-                  </div>
-                ) : (
-                  <p className="submit-success" role="status">✦ Score submitted. You're on the board!</p>
-                )}
-
-                <button
-                  type="button"
-                  onClick={handleRestart}
-                  disabled={submitting}
-                  className="restart-button"
-                >
-                  PLAY AGAIN <span aria-hidden="true">↗</span>
-                </button>
-
-                <div className="leaderboard-block">
-                  <Leaderboard playerName={playerName} limit={5} />
-                </div>
-              </section>
-            )}
+            <div className="side-note">
+              <span className="side-note-mark" aria-hidden="true">!</span>
+              <p><strong>Quick tip</strong> The gaps get tighter. Tiny taps beat panic flaps.</p>
+            </div>
+            <section className="poster-card leaderboard-card" aria-label="Leaderboard">
+              <Leaderboard playerName={submitted ? playerName : undefined} limit={5} />
+            </section>
           </aside>
         </main>
 
